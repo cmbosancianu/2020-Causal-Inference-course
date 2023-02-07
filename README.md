@@ -5,12 +5,12 @@ This course represented the 2nd part of the sequence in statistical modeling for
 Instructors:
 
 - Constantin Manuel Bosancianu ([https://cmbosancianu.github.io](https://cmbosancianu.github.io))
-- Max Schaub ([https://maxschaub.eu](https://maxschaub.eu))
+- Max Schaub ([https://maxschaub.eu](https://maxschaub.eu))^[I am extremely grateful to Max for permission to make public the set of files he developed for the class. Authorship has been clearly indicated in the case of each file.]
 
 Teaching assistants:
 
 - Adelaida Barrera Daza ([https://www.hertie-school.org/en/who-we-are/profile/person/adelaida-barrera](https://www.hertie-school.org/en/who-we-are/profile/person/adelaida-barrera))
-- Sebastian Ramirez Ruiz ([https://seramirezruiz.github.io](https://seramirezruiz.github.io))
+- Sebastian Ramirez Ruiz ([https://seramirezruiz.github.io](https://seramirezruiz.github.io))^[Both Adelaida and Sebastian were invaluable during the course of the class, from running laboratory sessions, to developing code files, and many other tasks in between. We couldn't have wished for better support, for which we remain grateful to this day!]
 
 ## General readings
 
@@ -28,7 +28,7 @@ Most **Required Readings** are taken from this book. Occasionally, we also sourc
 
 In addition, participants will encounter chapters from other books and journal articles to read; these primarily provide illustrations and more background. Articles that are designated as **Optional Readings** are not required, although references to them and techniques they use will be made during the lecture. 
 
-Articles listed under **Application Readings** serve as an example case during the lecture. For each session, the first reading is mandatory. In order to increase the choice set for participants, we also additional applications papers, but these will usually not be discussed in class. Reading or skim-reading these papers will give you a clearer idea how the method discussed during the session is used in practice.
+Articles listed under **Application Readings** serve as an example case during the lecture. For each session, the first reading is mandatory. In order to increase the choice set for participants, we also include additional applications papers, but these will usually not be discussed in class. Reading or skim-reading these papers will give you a clearer idea how the method discussed during the session is used in practice.
 
 This course has an exclusive focus on causal identification and inference. There are other books that focus more on statistical modeling and estimation. If you are interested in these topics, please consult the following:
 
@@ -37,3 +37,19 @@ This course has an exclusive focus on causal identification and inference. There
 3. Fox, J. (2016). *Applied Regression Analysis and Generalized Linear Models* (3rd ed.). London: Sage Publications. [theoretical treatment of OLS regression and GLMs, along with selected additional topics, e.g. multilevel models]
 4. Freedman, D. A. (2009). *Statistical Models: Theory and Practice*. Cambridge: Cambridge University Press.
 5. Wooldridge, J. M. (2013). *Introductory Econometrics: A Modern Approach* (5th ed.). Mason, OH: Cengage Learning. [an econometric classic]
+
+## Session overview
+
+1. **Introduction: Counterfactual causality**
+2. **Foundations: The potential outcomes framework and experiments**
+3. **Revisiting regression estimators of causal effects**
+4. **Causal graphs**
+5. **Instrumental Variable estimation**
+6. **Matching**
+7. **Regression discontinuity designs**
+8. **DiD and Synthetic controls**
+9. **Causal inference in panel data and fixed-effects specifications**
+10. **Moderation and heterogeneous effects**
+11. **Unpacking causal mechanisms: Mediation**
+12. **Field experiments**
+
