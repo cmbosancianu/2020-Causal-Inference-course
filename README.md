@@ -5,12 +5,16 @@ This course represented the 2nd part of the sequence in statistical modeling for
 Instructors:
 
 - Constantin Manuel Bosancianu ([https://cmbosancianu.github.io](https://cmbosancianu.github.io))
-- Max Schaub ([https://maxschaub.eu](https://maxschaub.eu))^[I am extremely grateful to Max for permission to make public the set of files he developed for the class. Authorship has been clearly indicated in the case of each file.]
+- Max Schaub ([https://maxschaub.eu](https://maxschaub.eu))
+
+I am extremely grateful to Max for permission to make public the set of files he developed for the class. Authorship has been clearly indicated in the case of each file.
 
 Teaching assistants:
 
 - Adelaida Barrera Daza ([https://www.hertie-school.org/en/who-we-are/profile/person/adelaida-barrera](https://www.hertie-school.org/en/who-we-are/profile/person/adelaida-barrera))
-- Sebastian Ramirez Ruiz ([https://seramirezruiz.github.io](https://seramirezruiz.github.io))^[Both Adelaida and Sebastian were invaluable during the course of the class, from running laboratory sessions, to developing code files, and many other tasks in between. We couldn't have wished for better support, for which we remain grateful to this day!]
+- Sebastian Ramirez Ruiz ([https://seramirezruiz.github.io](https://seramirezruiz.github.io))
+
+Both Adelaida and Sebastian were invaluable during the course of the class, from running laboratory sessions, to developing code files, and many other tasks in between. All code files developed for the seminar sessions were entirely authored by them, and they deserve full credit for this. We couldn't have wished for better support, for which we remain grateful to this day!
 
 ## General readings
 
@@ -24,7 +28,7 @@ Most **Required Readings** are taken from this book. Occasionally, we also sourc
 2. Morgan, S. L., & Winship, C. (2015). *Counterfactuals and Causal Inference: Methods and Principles for Social Research* (2nd ed.). New York: Cambridge University Press.
 3. Hernán, M. A., & Robins, J. A. (2020). *Causal Inference: What If*. Boca Raton, FL: CRC Press.
 4. Cunningham, S. (2021). *Causal Inference: The Mixtape*. New Haven: Yale University Press.
-5. Angrist, Joshua David, and Jörn-Steffen Pischke. *Mostly Harmless Econometrics: An Empiricist’s Companion*. Princeton: Princeton University Press, 2009. Section 3.2.
+5. Angrist, Joshua David, and Jörn-Steffen Pischke. *Mostly Harmless Econometrics: An Empiricist's Companion*. Princeton: Princeton University Press, 2009. Section 3.2.
 
 In addition, participants will encounter chapters from other books and journal articles to read; these primarily provide illustrations and more background. Articles that are designated as **Optional Readings** are not required, although references to them and techniques they use will be made during the lecture. 
 
