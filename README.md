@@ -14,7 +14,7 @@ Teaching assistants:
 - Adelaida Barrera Daza ([https://www.hertie-school.org/en/who-we-are/profile/person/adelaida-barrera](https://www.hertie-school.org/en/who-we-are/profile/person/adelaida-barrera))
 - Sebastian Ramirez Ruiz ([https://seramirezruiz.github.io](https://seramirezruiz.github.io))
 
-Both Adelaida and Sebastian were invaluable during the course of the class, from running laboratory sessions, to developing code files, and many other tasks in between. All code files developed for the seminar sessions were entirely authored by them, and they deserve full credit for this. We couldn't have wished for better support, for which we remain grateful to this day!
+Both Adelaida and Sebastian were *invaluable* during the course of the class, from running laboratory sessions, to developing `Rmarkdown` code files, finding example data, generating teaching slides for labs, and many other tasks in between. All code files and slides developed for the seminar sessions were entirely authored by them, and they deserve full credit for this. We couldn't have wished for better support, for which we remain grateful to this day!
 
 ## General readings
 
@@ -44,16 +44,16 @@ This course has an exclusive focus on causal identification and inference. There
 
 ## Session overview
 
-1. **Introduction: Counterfactual causality**
-2. **Foundations: The potential outcomes framework and experiments**
-3. **Revisiting regression estimators of causal effects**
-4. **Causal graphs**
-5. **Instrumental Variable estimation**
-6. **Matching**
-7. **Regression discontinuity designs**
-8. **DiD and Synthetic controls**
-9. **Causal inference in panel data and fixed-effects specifications**
-10. **Moderation and heterogeneous effects**
-11. **Unpacking causal mechanisms: Mediation**
-12. **Field experiments**
+1. **Introduction: Counterfactual causality** (Max and Manuel jointly)
+2. **Foundations: The potential outcomes framework and experiments** (Manuel)
+3. **Revisiting regression estimators of causal effects** (Max)
+4. **Causal graphs** (Manuel)
+5. **Instrumental Variable estimation** (Max)
+6. **Matching** (Max)
+7. **Regression discontinuity designs** (Manuel)
+8. **DiD and Synthetic controls** (Max)
+9. **Causal inference in panel data and fixed-effects specifications** (Manuel)
+10. **Moderation and heterogeneous effects** (Max)
+11. **Unpacking causal mechanisms: Mediation** (Manuel)
+12. **Field experiments** (Max and Manuel jointly)
 
