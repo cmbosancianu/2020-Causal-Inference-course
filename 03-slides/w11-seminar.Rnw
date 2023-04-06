@@ -1,0 +1,385 @@
+\documentclass[11pt,english,dvipsnames,aspectratio=169,handout]{beamer}
+\usepackage{fontspec}
+\setsansfont[Mapping=tex-text]{Fira Sans}
+\setcounter{secnumdepth}{4}
+\setcounter{tocdepth}{4}
+\usepackage[normalem]{ulem}
+\usepackage[T1]{fontenc}
+\usepackage{dcolumn}
+\usepackage{booktabs}
+\usepackage{bm}
+\usepackage{setspace}
+\makeatletter
+\usetheme{metropolis}
+\setbeamertemplate{frame footer}{Bosancianu | Schaub | Hertie School}
+\setbeamerfont{page number in head/foot}{size=\tiny}
+\setbeamercolor{footline}{fg=gray}
+\usepackage{xcolor}
+\setbeamercovered{dynamic}
+\usepackage{tikz, tikz-cd, animate}
+\usetikzlibrary{arrows, positioning, fit, shapes.misc, shapes, backgrounds, trees}
+\usetikzlibrary{decorations.pathreplacing}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.10}
+\usepgfplotslibrary{fillbetween}
+\usepackage{pgfplotstable}
+\usepackage[labelformat=empty]{caption}
+% For table captions in Beamer
+\usepackage[sectionbib]{apacite}
+\renewcommand{\bibliographytypesize}{\footnotesize}
+\makeatletter
+\let\st@rtbibsection\@bibnewpage
+\let\st@rtbibchapter\@bibnewpage
+\makeatother
+\usepackage{amsmath, mathtools}
+\usepackage{xunicode}
+\usepackage{hyperref}
+\usepackage{pgfplots}
+\makeatletter
+\long\def\ifnodedefined#1#2#3{%
+    \@ifundefined{pgf@sh@ns@#1}{#3}{#2}%
+}
+\pgfplotsset{
+    discontinuous/.style={
+    scatter,
+    scatter/@pre marker code/.code={
+        \ifnodedefined{marker}{
+            \pgfpointdiff{\pgfpointanchor{marker}{center}}%
+             {\pgfpoint{0}{0}}%
+             \ifdim\pgf@y>0pt
+                \tikzset{options/.style={mark=*}}
+                \draw [densely dashed] (marker-|0,0) -- (0,0);
+                \draw plot [mark=*,mark options={fill=white}] coordinates {(marker-|0,0)};
+             \else
+                \ifdim\pgf@y<0pt
+                    \tikzset{options/.style={mark=*,fill=white}}
+                    \draw [densely dashed] (marker-|0,0) -- (0,0);
+                    \draw plot [mark=*] coordinates {(marker-|0,0)};
+                \else
+                    \tikzset{options/.style={mark=none}}
+                \fi
+             \fi
+        }{
+            \tikzset{options/.style={mark=none}}        
+        }
+        \coordinate (marker) at (0,0);
+        \begin{scope}[options]
+    },
+    scatter/@post marker code/.code={\end{scope}}
+    }
+}
+\makeatother
+% Defines a checkmark
+\def\checkmark{\tikz\fill[scale=0.4,color=orange](0,.35) -- (.25,0) -- (1,.7) -- (.25,.15) -- cycle;}
+\newcommand{\indep}{\perp \!\!\!\! \perp}
+\setbeamertemplate{itemize items}{\checkmark}
+\usepackage{multirow}
+\hypersetup{pdfauthor={Bosancianu and Schaub},
+	pdftitle={Statistical Modeling and Causal Inference with R},
+	pdfsubject={Week 11: Causal Mediation},
+	pdfkeywords={Berlin, Hertie, 2020, week 11, RDD}}
+\title{\textsc{Statistical Modeling and Causal Inference with R}}
+\subtitle{Week 11: Causal Mediation}
+\date{November 23, 2020}
+\author{Manuel Bosancianu \hfill Max Schaub}
+\institute{Hertie School of Governance}
+\begin{document}
+\maketitle
+
+<<r setup-main, echo=FALSE, include=FALSE>>=
+knitr::opts_chunk$set(
+	echo = FALSE,
+	error = FALSE,
+	message = FALSE,
+	warning = FALSE,
+	cache = FALSE,
+	comment = NA
+)
+
+library(pacman)
+p_load(tidyverse, readstata13, ggthemes, texreg, foreign,
+       mediation, car)
+
+savePlots <- FALSE
+@
+
+\begin{frame}
+  \frametitle{Results: Baron--Kenny approach}
+  
+<<r read-data>>=
+df_jobs <- read.dta13(file = "../02-data/11-Jobs-NoMiss-Cont.dta",
+                      convert.factors = FALSE)
+@
+
+ \scriptsize
+   \begin{align}
+   Depression_i &= \alpha_1 + \beta_1\overbrace{Seminar_i}^{treatment} + \zeta_1X_i + \epsilon_{i1} \\
+   Confidence_i &= \alpha_2 + \beta_2Seminar_i + \zeta_2X_i + \epsilon_{i2}\\
+   Depression_i &= \alpha_3 + \gamma Seminar_i + \beta_3\underbrace{Confidence_i}_{mediator} + \zeta_3X_i + \epsilon_{i3}
+   \end{align}
+
+<<r baron-kenny-results, cache=TRUE>>=
+model1 <- lm(depress2 ~ treat_num + depress1 + age + as.factor(educ) + 
+               as.factor(sex) + as.factor(nonwhite) + econ_hard + 
+               as.factor(marital) + as.factor(occp) + as.factor(income),
+             data = df_jobs,
+             na.action = na.omit)
+
+model2 <- lm(job_seek ~ treat_num + depress1 + age + as.factor(educ) + 
+               as.factor(sex) + as.factor(nonwhite) + econ_hard + 
+               as.factor(marital) + as.factor(occp) + as.factor(income),
+             data = df_jobs,
+             na.action = na.omit)
+
+model3 <- lm(depress2 ~ treat_num + job_seek + depress1 + age + 
+               as.factor(educ) + as.factor(sex) + as.factor(nonwhite) + 
+               econ_hard + as.factor(marital) + as.factor(occp) + 
+               as.factor(income),
+             data = df_jobs,
+             na.action = na.omit)
+@
+
+<<r baron-kenny-present, eval=FALSE>>=
+texreg(list(model1, model2, model3),
+       digits = 3,
+       custom.model.names = c("DV: Depression", "DV: Confidence", "DV: Depression"),
+       omit.coef = c("(as.factor)|(age)|(depress)|(econ)"),
+       custom.coef.names = c("(Intercept)","Seminar","Confidence"),
+       caption = "Results from 3 specifications",
+       caption.above = TRUE,
+       booktabs = TRUE,
+       dcolumn = TRUE,
+       use.packages = FALSE,
+       fontsize = "footnotesize",
+       custom.note = "%stars. Estimates from pre-treatment covariates have been excluded from the table.")
+@
+
+\begin{table}
+\begin{center}
+\begin{scriptsize}
+\begin{tabular}{l D{.}{.}{4.6} D{.}{.}{4.6} D{.}{.}{4.6}}
+\toprule
+ & \multicolumn{1}{c}{DV: Depression} & \multicolumn{1}{c}{DV: Confidence} & \multicolumn{1}{c}{DV: Depression} \\
+\midrule
+(Intercept) & 0.895^{***} & 3.870^{***} & 1.499^{***}  \\
+            & (0.133)     & (0.159)     & (0.158)      \\
+Seminar     & -0.047      & 0.101^{*}   & -0.032       \\
+            & (0.035)     & (0.042)     & (0.035)      \\
+Confidence  &             &             & -0.156^{***} \\
+            &             &             & (0.023)      \\
+\bottomrule
+\multicolumn{4}{p{8cm}}{\tiny{$^{***}p<0.001$; $^{**}p<0.01$; $^{*}p<0.05$. Estimates from pre-treatment covariates have been excluded from the table. $N=1285$. Measures of model fit removed from the table.}}
+\end{tabular}
+\end{scriptsize}
+\label{tab:01}
+\end{center}
+\end{table}
+  
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Computing effects \& uncertainty}
+
+\begin{itemize}
+\setlength\itemsep{1.5em}
+  \item Direct effect: \Sexpr{round(as.numeric(model3$coef["treat_num"]), 3)}
+  \item Indirect effect: $\beta_2\times \beta_3$ = $0.101\times -0.156$ = \Sexpr{round(as.numeric(model2$coef["treat_num"])*as.numeric(model3$coef["job_seek"]), 3)}
+  \item Total effect: $direct + indirect$ = $-0.032 + (-0.016)$ = $-0.047$ (rounding)
+\end{itemize}
+\pause
+
+\begin{equation}
+  SE_{indirect} = \sqrt{c^2\sigma_b^2 + b^2\sigma_c^2 + \sigma_b^2\sigma_c^2}
+\end{equation}
+\pause
+
+<<r compute-SEs, eval=FALSE>>=
+# SE for direct effect (not really needed, since it's visible from the table of
+# results).
+sqrt(hccm(model3)["treat_num","treat_num"])
+# SE for indirect effect; regular method
+sqrt((model2$coef["treat_num"]^2)*hccm(model3)["job_seek","job_seek"] + (model3$coef["job_seek"]^2)*hccm(model2)["treat_num","treat_num"] + hccm(model3)["job_seek","job_seek"]*hccm(model2)["treat_num","treat_num"])
+@
+
+\begin{table}
+\scriptsize
+\begin{tabular}{l D{.}{.}{4.6} D{.}{.}{4.6}}
+\toprule
+  & \multicolumn{1}{c}{Direct} & \multicolumn{1}{c}{Indirect} \\
+\midrule
+$\beta$ & -0.032 & -0.016^{*} \\
+SE  &  (0.035) & (0.007) \\ 
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{frame}
+
+
+\section{Causal mediation results}
+
+\begin{frame}
+  \frametitle{The Imai \textit{et al} setup I}
+  \textit{Sequential ignorability} is still needed as fundamental assumption.\bigskip
+  
+  Requires only 2 regressions (OLS, logit, probit, survival\dots):
+  
+   \footnotesize
+   \begin{align}
+   Confidence_i &= \psi_1 + \phi_1\overbrace{Seminar_i}^{treatment} + \zeta_2X_i + \epsilon_{i2}\label{eq:01}\\
+   Depression_i &= \psi_2 + \phi_2Seminar_i + \phi_3\underbrace{Confidence_i}_{mediator} + \zeta_3X_i + \epsilon_{i3} \label{eq:02}
+   \end{align}
+  \pause
+  \normalsize
+  
+  Generate predictions for mediator from Equation \ref{eq:01}: $Confidence_i | Seminar_i=0$ and $Confidence_i | Seminar_i=1$.
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{The Imai \textit{et al} setup II}
+  Generate predictions for the outcome from Equation \ref{eq:02}, using predictions for mediator: $Depression_i | Seminar_i=1, Confidence_i(1)$ and $Depression_i | Seminar_i=1, Confidence_i(0)$.
+  
+  \begin{equation}
+    \footnotesize
+		ACME = \delta_i(t) = Y_i(t, M_i(1)) - Y_i(t, M_i(0)),\; for\; each\; t\in \{0;1\}
+	\end{equation}
+  
+  SEs computed with bootstrapping (or Monte Carlo methods).
+  
+\end{frame}
+
+
+\begin{frame}[fragile]
+  \frametitle{Syntax: Imai \textit{et al} approach}
+
+<<r imai-al-results-1>>=
+set.seed(67776)
+
+# Predictors have to be coded as dummies, or else the function doesn't
+# work.
+df_jobs <- df_jobs %>% 
+  mutate(educ_1 = if_else(educ == 1, 1, 0),
+         educ_2 = if_else(educ == 2, 1, 0),
+         educ_3 = if_else(educ == 3, 1, 0),
+         educ_4 = if_else(educ == 4, 1, 0),
+         educ_5 = if_else(educ == 5, 1, 0),
+         marital_1 = if_else(marital == 1, 1, 0),
+         marital_2 = if_else(marital == 2, 1, 0),
+         marital_3 = if_else(marital == 3, 1, 0),
+         marital_4 = if_else(marital == 4, 1, 0),
+         marital_5 = if_else(marital == 5, 1, 0),
+         income_1 = if_else(income == 1, 1, 0),
+         income_2 = if_else(income == 2, 1, 0),
+         income_3 = if_else(income == 3, 1, 0),
+         income_4 = if_else(income == 4, 1, 0),
+         income_5 = if_else(income == 5, 1, 0),
+         occp_1 = if_else(occp == 1, 1, 0),
+         occp_2 = if_else(occp == 2, 1, 0),
+         occp_3 = if_else(occp == 3, 1, 0),
+         occp_4 = if_else(occp == 4, 1, 0),
+         occp_5 = if_else(occp == 5, 1, 0),
+         occp_6 = if_else(occp == 6, 1, 0),
+         occp_7 = if_else(occp == 7, 1, 0))
+
+# Run the two models that are needed
+med.fit <- lm(job_seek ~ treat_num + depress1 + age + educ_2 + educ_3 + 
+                educ_4 + educ_5 + sex + nonwhite + econ_hard + 
+                marital_2 + marital_3 + marital_4 + marital_5 + occp_2 +
+                occp_3 + occp_4 + occp_5 + occp_6 + occp_7 + income_2 +
+                income_3 + income_4 + income_5,
+             data = df_jobs,
+             na.action = na.omit)
+out.fit <- lm(depress2 ~ treat_num + job_seek + depress1 + age + educ_2 + 
+                educ_3 + educ_4 + educ_5 + sex + nonwhite + econ_hard + 
+                marital_2 + marital_3 + marital_4 + marital_5 + occp_2 +
+                occp_3 + occp_4 + occp_5 + occp_6 + occp_7 + income_2 +
+                income_3 + income_4 + income_5,
+             data = df_jobs,
+             na.action = na.omit)
+@
+
+<<r imai-al-results-2, echo = TRUE, eval=TRUE, cache=TRUE, size="footnotesize">>=
+# The "mediate()" function is used to calculate the 
+# ACME and ADE
+med.out <- mediate(model.m = med.fit,
+                   model.y = out.fit,
+                   sims = 750,
+                   boot = TRUE,
+                   treat = "treat_num",
+                   mediator = "job_seek")
+@
+
+The automated function works with the two regression model objects.
+
+\end{frame}
+
+
+\begin{frame}[fragile]
+  \frametitle{Results: Imai \textit{et al} approach}
+
+<<r imai-al-results-3, echo = FALSE, results='markup', size="tiny">>=
+summary(med.out)
+@
+
+$ADE_{BK} = -0.032\; (0.035)$ and $ACME_{BK} = -0.016\; (0.007)$.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Sensitivity analysis I}
+  ACME unbiased if $cov(\epsilon_{i2}, \epsilon_{i3})=0$ (call this $\rho$).\bigskip
+  
+  If \textit{sequential ignorability} holds, then $\rho=0$. If not, estimates are biased.\bigskip
+  \pause
+  
+  In practice, sensitivity analysis is based on a function of $R^2$ from the two models \cite<see>[pp. 61--62]{imai_identification_2010}.
+
+\end{frame}
+
+
+\begin{frame}[fragile]
+  \frametitle{Sensitivity analysis II}
+  
+<<r imai-al-sensitivity-1, echo = TRUE, eval=TRUE, results='markup', cache=TRUE, size="scriptsize">>=
+# "medsens()" is the function which conducts the
+# sensitivity analysis
+sens.out <- medsens(med.out,
+                    rho.by = 0.05,
+                    sims = 750,
+                    effect.type = "indirect")
+@
+
+<<r imai-al-sensitivity-2, eval=TRUE, results='markup',size="tiny">>=
+summary(sens.out)
+@
+
+\end{frame}
+
+\begin{frame}[fragile]
+  \frametitle{Sensitivity analysis III}
+  
+ <<r imai-al-sensitivity-3, fig.height=3, fig.width=4.5, fig.align="center">>=
+plot(sens.out)
+@ 
+  
+\end{frame}
+
+
+% END
+\begin{frame}
+\begin{center}
+    \Huge Thank \textcolor{orange}{you} for the kind attention!
+\end{center}
+\end{frame}
+
+% REFERENCES %
+
+\begin{frame}[allowframebreaks, plain]
+\bibliographystyle{apacite}
+\scriptsize\bibliography{../Bibliography}
+\end{frame}
+
+\end{document}

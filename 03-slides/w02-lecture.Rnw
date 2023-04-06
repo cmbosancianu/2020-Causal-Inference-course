@@ -1,0 +1,961 @@
+\documentclass[12pt,english,dvipsnames,aspectratio=169,handout]{beamer}
+\usepackage{fontspec}
+\setsansfont[Mapping=tex-text]{Fira Sans}
+\setcounter{secnumdepth}{4}
+\setcounter{tocdepth}{4}
+\usepackage[normalem]{ulem}
+\usepackage[T1]{fontenc}
+\usepackage{dcolumn}
+\usepackage{booktabs}
+\usepackage{setspace}
+\makeatletter
+\usetheme{metropolis}
+\setbeamertemplate{frame footer}{Bosancianu | Schaub | Hertie School}
+\setbeamerfont{page number in head/foot}{size=\tiny}
+\setbeamercolor{footline}{fg=gray}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows, positioning}
+\usepackage[labelformat=empty]{caption}
+% For table captions in Beamer
+\usepackage[sectionbib]{apacite}
+\renewcommand{\bibliographytypesize}{\footnotesize}
+\makeatletter
+\let\st@rtbibsection\@bibnewpage
+\let\st@rtbibchapter\@bibnewpage
+\makeatother
+\usepackage{amsmath, mathtools}
+\usepackage{xunicode}
+\usepackage{hyperref}
+\graphicspath{{./figures/}} 
+% Defines a checkmark
+\def\checkmark{\tikz\fill[scale=0.4,color=orange](0,.35) -- (.25,0) -- (1,.7) -- (.25,.15) -- cycle;}
+% boxes
+\def\boxitorange#1{%
+  \smash{\color{orange}\fboxrule=1pt\relax\fboxsep=2pt\relax%
+  \llap{\rlap{\fbox{\vphantom{0}\makebox[#1]{}}}~}}\ignorespaces
+}
+\def\boxitblue#1{%
+  \smash{\color{blue}\fboxrule=1pt\relax\fboxsep=2pt\relax%
+  \llap{\rlap{\fbox{\vphantom{0}\makebox[#1]{}}}~}}\ignorespaces
+}
+
+\newcommand{\indep}{\perp \!\!\!\! \perp}
+\setbeamertemplate{itemize items}{\checkmark}
+\usepackage{multirow}
+\hypersetup{pdfauthor={Bosancianu and Schaub},
+	pdftitle={Statistical Modeling and Causal Inference with R},
+	pdfsubject={Week 2: Potential Outcomes Framework},
+	pdfkeywords={Berlin, Hertie, 2020, week 2}}
+\title{\textsc{Statistical Modeling and Causal Inference with R}}
+\subtitle{Week 2: Potential Outcomes Framework}
+\date{September 14, 2020}
+\author{Manuel Bosancianu \hfill Max Schaub}
+\institute{Hertie School of Governance}
+\begin{document}
+\maketitle
+
+<<r setup-main, echo=FALSE, include=FALSE>>=
+knitr::opts_chunk$set(
+	echo = FALSE,
+	error = FALSE,
+	message = FALSE,
+	warning = FALSE,
+	cache = TRUE,
+	comment = NA
+)
+
+library(pacman)
+p_load(tidyverse, foreign, magrittr)
+@
+
+\begin{frame}
+	\frametitle{Today's focus}
+	
+	\begin{itemize}
+		\setlength\itemsep{1.5em}
+		\item Potential outcomes framework (POF)
+		\item Biases in causal inference
+		\item Assumptions underpinning POF
+		\item Randomization (RCTs) in POF
+	\end{itemize}
+\end{frame}
+
+
+\begin{frame}
+	\frametitle{Last week}
+	
+	In public policy, we are frequently interested in the causal effect* of an intervention (or phenomenon) on an important outcome.
+	
+	\begin{figure}
+		\centering
+		\scriptsize
+		\begin{tikzpicture}[->,
+			>=stealth',
+			shorten >=1pt,
+			auto,
+			node distance=5cm,
+			thick]
+			
+			\tikzstyle{round}=[circle, thick, auto, draw, minimum size=6mm]
+			\tikzstyle{square}=[rectangle, thick, auto, draw, minimum size=6mm]
+					
+			\node[draw=none, align=center] (1) {Inter-group contact (\texttt{X})};
+			\node[draw=none, align=center] (2) [right of=1] {Prejudice (\texttt{Y})};
+			\path[every node/.style={font=\sffamily\small}] (1) edge node {} (2);
+			
+		\end{tikzpicture}
+	\end{figure}
+	\pause
+	
+	Assuming we have data to answer this, it's easy to compute the magnitude of association.\bigskip
+	
+<<r prepare-ess-data, eval=FALSE>>=
+df_ess <- read.spss(file = "../../../../11-Data-repository/34-ESS/ESS7e02_2.sav",
+                    to.data.frame = TRUE,
+                    use.value.labels = FALSE)
+
+# Keep needed variables and save data
+df_ess %<>% 
+  dplyr::select(dfegcon, smegbli, smegbhw, smctmbe,
+                cntry, gndr, agea, eduyrs)
+  
+saveRDS(df_ess, file = "../02-data/02-week-ESS7.rds")
+@
+	
+<<r compute-association, eval=FALSE>>=
+df_ess <- readRDS("../02-data/02-week-ESS7.rds")
+
+# Small amount of recoding
+df_fr <- df_ess %>% 
+  rename(female = gndr) %>% 
+  mutate(female = case_when(female == 1 ~ 0,
+                            female == 2 ~ 1)) %>% 
+  mutate(race_intel = case_when(smegbli == 1 ~ 1,
+                                smegbli == 2 ~ 0),
+         race_work = case_when(smegbhw == 1 ~ 1,
+                               smegbhw == 2 ~ 0),
+         race_better = case_when(smctmbe == 1 ~ 1,
+                                 smctmbe == 2 ~ 0)) %>% 
+  mutate(freq_contact = case_when(dfegcon <= 2 ~ 0,
+                                  dfegcon > 2 ~ 1)) %>% 
+  dplyr::select(-c(smegbli, smegbhw, smctmbe, dfegcon)) %>% 
+  mutate(cntry = as.character(cntry)) %>% 
+  filter(cntry == "FR")
+
+# Compute index of prejudice
+df_fr$prej_index <- rowMeans(df_fr[ ,c("race_intel",
+                                       "race_work",
+                                       "race_better")],
+                             na.rm = TRUE)
+
+# Cleanup
+df_fr %<>% 
+  dplyr::select(-c(race_intel, race_work, race_better))
+
+cor(df_fr$prej_index, df_fr$freq_contact, 
+    method = "spearman", 
+    use = "complete.obs")
+@
+
+	Example from France in 2014 (with ESS data): $-0.14$; the ``contact hypothesis'' \cite{allport_nature_1954} receives support.
+	
+\end{frame}
+
+
+
+\begin{frame}
+	\frametitle{Last week}
+	
+	Difficulties stem from the multiple dynamics that generate an association between the two. Naturally, $contact \Rightarrow prejudice$.
+	
+	What \textcolor{orange}{other} reasons might there be for an association?\pause
+	
+    \begin{figure}[ht]
+    \scriptsize
+        \begin{minipage}[b]{0.45\linewidth}
+            \centering
+            \begin{tikzpicture}[->, >=stealth', shorten >=1pt, auto, node distance=2.5cm, thick]
+      \tikzstyle{round}=[circle, thick, auto, draw, minimum size=6mm]
+			\tikzstyle{square}=[rectangle, thick, auto, draw, minimum size=6mm]
+					
+			\node[round, align=center] (1) {\texttt{Y}};
+			\node[round, align=center] (2) [right of=1] {\texttt{X}};
+			\path (1) edge node {} (2);
+			\end{tikzpicture}
+        \end{minipage}
+        \hspace{0.3cm}
+        \begin{minipage}[b]{0.45\linewidth}
+            \centering
+            \begin{tikzpicture}[->, >=stealth', shorten >=1pt, auto, node distance=2.5cm, thick]
+			\tikzstyle{round}=[circle, thick, auto, draw, minimum size=6mm]
+			\tikzstyle{square}=[rectangle, thick, auto, draw, minimum size=6mm]
+			\node[round, align=center] (1) {\texttt{X}};
+			\node[round, align=center] (2) [right of=1] {\texttt{Y}};
+			\node[square, align=center] (3) [above right of=1, xshift=-0.6cm] {\texttt{Z}};
+			\path (1) edge node {} (2);
+			\path[color=orange] (3) edge node {} (1);
+			\path[color=orange] (3) edge node {} (2);
+			\end{tikzpicture}
+        \end{minipage}
+    \end{figure}
+	\pause
+	
+	In this case, $Z$ might be education.
+	
+\end{frame}
+
+
+\begin{frame}
+	\frametitle{Last week}
+	
+	Causal inference is primarily a process of \textit{reasoning}:
+	
+	\begin{itemize}
+	  \item eliminating alternative (non-causal) explanations for the association
+	  \item making explicit the assumptions needed for a causal relationship
+	\end{itemize}\bigskip
+	
+	It requires an empirical step: marshalling data to show these arguments hold.\bigskip
+	
+	We rely on a \textit{probabilistic} understanding of causality: causes change the probabilities of their effects.
+	
+\end{frame}
+
+
+
+\section{Potential Outcomes Framework}
+
+\begin{frame}
+	\frametitle{Foundations}
+	
+  The \textcolor{orange}{POF} is a very convenient way to illustrate concepts like \textit{confounding} or \textit{selection bias}.\bigskip
+  
+  Each individual $i$ in a population can be exposed ($d_i=1$) to a \textit{cause}, or not exposed ($d_i=0$) (e.g., contact with member of different ethnic group).\bigskip
+  \pause
+  
+  For each $i$, assume we can assess an outcome (e.g., prejudice level) \textit{both} after being exposed and not exposed: $y_{d,i}$.
+  
+  \begin{center}
+    \textcolor{orange}{$y_{0,i}$} = non-exposure \hspace{1cm} \textcolor{orange}{$y_{1,i}$} = exposure
+  \end{center}
+
+\end{frame}
+
+
+\begin{frame}
+	\frametitle{Notation}
+  
+  \begin{table}[!ht]
+  \centering
+  \begin{tabular}{l c}
+  \toprule
+  \citeA{angrist_mastering_2015} & $y_{0i}$ and $y_{1i}$ \\
+  \citeA{cunningham_causal_2021} & $y_i^0$ and $y_i^1$ \\
+  \citeA{gerber_field_2012} & $y_i(0)$ and $y_i(1)$ \\
+  \bottomrule
+  \end{tabular}
+  \label{tab:01}
+  \caption{Notation differences}
+  \end{table}\bigskip
+  
+  We follow \citeA{angrist_mastering_2015} in notation for the rest of the class.
+
+\end{frame}
+
+
+\begin{frame}
+	\frametitle{Individual treatment effect (ITE)}
+  
+  \begin{equation}
+    ITE = \delta_i= y_{1i} - y_{0i}
+  \label{eq:01}
+  \end{equation}
+  
+  The $ITE$ is a ``comparison of two states of the world'' \cite{cunningham_causal_2021}: individual $i$ exposed to contact, and not exposed to it.\bigskip
+  \pause
+
+  \textit{Fundamental problem} \cite{holland_statistics_1986} of causal inference: in reality, we only see one of these two states.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Observable outcomes}
+  
+  Each observable outcome can be described by a \textit{switching equation}:
+  
+  \begin{equation}
+    y_i = d_iy_{1i} + (1 - d_i)y_{0i}
+  \label{eq:02}
+  \end{equation}\bigskip
+  \pause
+  Once $D$ is fixed, we only see \textit{one of} the values: $y_{0i}$ or $y_{1i}$.\bigskip
+  
+  The $ITE$ is unattainable.
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Average treatment effect (ATE)}
+  
+  For a population under study, we are typically interested in the ATE:
+  
+  \begin{equation}
+  E[\delta_i] = E[y_{1i} - y_{0i}] = E[y_{1i}] - E[y_{0i}]
+    \label{eq:03}
+  \end{equation}\bigskip
+  \pause
+  
+  $E[X]$ is the expectation of a random variable, $X$, computed
+  
+  \begin{equation}
+  E[X] = \sum x*p(X=x)
+    \label{eq:04}
+  \end{equation}
+  
+  The $ATE$ is unattainable as well.
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Example (intermission)}
+  
+  You are studying a (very small) population of students, assigned to a dorm room with a co-ethnic ($contact=0$) or a peer from a different ethnic group ($contact=1$).
+  
+  \begin{table}[!ht]
+  \centering
+  \scriptsize
+  \begin{tabular}{c c c}
+  \toprule
+  \textbf{Student (\textit{i})} & \multicolumn{2}{c}{\textbf{Prejudice}} \\
+  & $y_{0i}$ & $y_{1i}$ \\
+  \midrule
+  1 & 6 & 5 \\
+  2 & 4 & 2 \\
+  3 & 4 & 4 \\
+  4 & 6 & 7 \\
+  5 & 3 & 1 \\
+  6 & 2 & 2 \\
+  7 & 8 & 7 \\
+  8 & 4 & 5 \\
+  \bottomrule
+  \end{tabular}
+  \label{tab:02}
+  \caption{Potential outcomes for 8 students}
+  \end{table}
+
+<<r define-data>>=
+df_contact <- data.frame(index = c(1, 2, 3, 4, 5, 6, 7, 8),
+                         contact = c(0, 1, 0, 0, 1, 1, 0, 0),
+                         y_zero = c(6, 4, 4, 6, 3, 2, 8, 4),
+                         y_one = c(5, 2, 4, 7, 1, 2, 7, 5))
+@
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Example (intermission)}
+  
+  \begin{table}[!ht]
+  \centering
+  \scriptsize
+  \begin{tabular}{c c c c}
+  \toprule
+  \textbf{Student (\textit{i})} & \multicolumn{3}{c}{\textbf{Prejudice}} \\
+  & $y_{0i}$ & $y_{1i}$ & \textcolor{orange}{$\delta_i$} \\
+  \midrule
+  1 & 6 & 5 & -1 \\
+  2 & 4 & 2 & -2 \\
+  3 & 4 & 4 & 0 \\
+  4 & 6 & 7 & 1 \\
+  5 & 3 & 1 & -2 \\
+  6 & 2 & 2 & 0 \\
+  7 & 8 & 7 & -1 \\
+  8 & 4 & 5 & 1 \\
+  \bottomrule
+  \end{tabular}
+  \label{tab:03}
+  \caption{ITEs}
+  \end{table}
+  
+  \begin{equation}
+  \footnotesize
+  ATE = E[\delta_i] = \frac{-1+(-2)+0+1+(-2)+0+(-1)+1}{8} = -0.5
+    \label{eq:05}
+  \end{equation}
+  
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{Example (intermission)}
+  
+  Imagine we now also know the treatment assignment of our subjects.
+
+\begin{table}[!ht]
+  \centering
+  \scriptsize
+  \begin{tabular}{c c c c c}
+  \toprule
+  \textbf{Student (\textit{i})} & \multicolumn{3}{c}{\textbf{Prejudice}} & \textbf{Contact} \\
+  & $y_{0i}$ & $y_{1i}$ & \textcolor{orange}{$\delta_i$} &  \\
+  \midrule
+  1 & 6 & 5 & -1 & 0 \\
+  2 & 4 & 2 & -2 & 1 \\
+  3 & 4 & 4 & 0 & 0\\
+  4 & 6 & 7 & 1 & 0\\
+  5 & 3 & 1 & -2 & 1 \\
+  6 & 2 & 2 & 0 & 1\\
+  7 & 8 & 7 & -1 & 0 \\
+  8 & 4 & 5 & 1 & 0\\
+  \bottomrule
+  \end{tabular}
+  \label{tab:04}
+  \caption{With treatment assignment}
+  \end{table}
+
+\end{frame}
+
+
+\begin{frame}
+	\frametitle{Two more quantities: ATT and\dots}
+  
+  \textit{Average treatment effect among the treated} (ATT):
+  
+  \begin{align}
+  \footnotesize
+    ATT &= E[\delta_i|d_i=1] \nonumber \\
+        &= E[y_{1i} - y_{0i}|d_i=1] \\
+        &= E[y_{1i}|d_i=1] - E[y_{0i}|d_i=1] \nonumber 
+  \label{eq:06}
+  \end{align}
+  
+  \textcolor{orange}{What is the ATT in our example?}
+  \pause
+  
+  \begin{equation}
+  \footnotesize
+  ATT = \frac{-2+(-2)+0}{3} = -1.333
+    \label{eq:07}
+  \end{equation}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Two more quantities: \dots ATU}
+  
+  \textit{Average treatment effect among the untreated} (ATU):
+  
+  \begin{align}
+  \footnotesize
+    ATU &= E[\delta_i|d_i=0] \nonumber \\
+        &= E[y_{1i} - y_{0i}|d_i=0] \\
+        &= E[y_{1i}|d_i=0] - E[y_{0i}|d_i=0] \nonumber 
+  \label{eq:08}
+  \end{align}
+  
+  \textcolor{orange}{What is the ATU in our example?}
+  \pause
+  
+  \begin{equation}
+  \footnotesize
+  ATU = \frac{-1+0+1+(-1)+1}{5} = 0
+    \label{eq:09}
+  \end{equation}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{An attainable quantity: NATE}
+  
+  All of the quantities above depend on us having perfect information about alternative states of the world.\bigskip
+  
+  \begin{table}[!ht]
+  \centering
+  \scriptsize
+  \begin{tabular}{c c c c c}
+  \toprule
+  \textbf{Student (\textit{i})} & \multicolumn{3}{c}{\textbf{Prejudice}} & \textbf{Contact} \\
+  & $y_{0i}$ & $y_{1i}$ & \textcolor{orange}{$\delta_i$} &  \\
+  \midrule
+  1 & 6 &   &  & 0 \\
+  2 &   & 2 &  & 1 \\
+  3 & 4 &   &  & 0\\
+  4 & 6 &   &  & 0\\
+  5 &   & 1 &  & 1 \\
+  6 &   & 2 &  & 1\\
+  7 & 8 &   &  & 0 \\
+  8 & 4 &   &  & 0\\
+  \bottomrule
+  \end{tabular}
+  \label{tab:05}
+  \caption{Information we \textit{do} have}
+  \end{table}
+  
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{An attainable quantity: NATE}
+  
+  This allows us to compute a \textit{na\"{i}ve} estimate of the $ATE$:
+  
+  \begin{align}
+  \footnotesize
+    NATE &= E[y_{1i}|d_i=1] - E[y_{0i}|d_i=0] \nonumber \\
+         &= \frac{2+1+2}{3} - \frac{6+4+6+8+4}{5} \\
+         &= 1.666 - 5.6 \nonumber \\
+         &= -3.933 \nonumber 
+  \label{eq:10}
+  \end{align}
+  
+  Notice that in this case $NATE \neq ATE$.
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Connections: ATE--ATT--ATU}
+  
+  Having perfect information allows us to understand the connection between $ATE$, $ATT$, and $ATU$.
+  
+  \begin{equation}
+  \footnotesize
+  ATE = p*ATT + (1-p)*ATU,\;where\;p=prob(D=1)
+    \label{eq:12}
+  \end{equation}
+  \pause
+  In our example of inter-ethnic contact:
+  
+  \begin{align}
+  \footnotesize
+    ATE &= \frac{3}{8}(-1.333) - \frac{5}{8}0 \nonumber \\
+        &= -0.5 - 0 \\
+        &= -0.5 \nonumber
+  \label{eq:13}
+  \end{align}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Connections: NATE--ATE--ATT--ATU}
+  
+  A bit of mathematical derivation \cite[p.~90]{cunningham_causal_2021} lets us see how these are linked to the $NATE$.
+  
+  \begin{equation}
+  \footnotesize
+  NATE = ATE + E[Y_0|D=1] - E[Y_0|D=0] + (1-p)(ATT-ATU)
+  \label{eq:13}
+  \end{equation}
+  \pause
+  The formula tells us how something we settle for ($NATE$) in actual analyses is related to something we strive for ($ATE$).
+\end{frame}
+
+
+
+\section{Defining biases}
+
+\begin{frame}
+  \frametitle{Two sources of bias}
+  
+  \begin{equation}
+  \footnotesize
+  NATE = ATE + \underbrace{E[Y_0|D=1] - E[Y_0|D=0]}_{selection\;bias} + \underbrace{(1-p)(ATT-ATU)}_{HTE\;bias}
+  \end{equation}
+  
+  $HTE$ = \textit{heterogeneous treatment effect}\bigskip
+  \pause
+  
+  \textcolor{orange}{Selection bias}: the difference in expected outcomes in the absence of treatment for the actual treatment and control group.
+\end{frame}
+
+\begin{frame}
+  \frametitle{Selection bias}
+  
+  \begin{table}[!ht]
+  \centering
+  \scriptsize
+  \begin{tabular}{c c c c c}
+  \toprule
+  \textbf{Student (\textit{i})} & \multicolumn{3}{c}{\textbf{Prejudice}} & \textbf{Contact} \\
+  & $y_{0i}$ & $y_{1i}$ & \textcolor{orange}{$\delta_i$} &  \\
+  \midrule
+  1 & \boxitblue{0.15cm}6 & 5 & -1 & 0 \\
+  2 & \boxitorange{0.15cm}4 & 2 & -2 & 1 \\
+  3 & \boxitblue{0.15cm}4 & 4 & 0 & 0\\
+  4 & \boxitblue{0.15cm}6 & 7 & 1 & 0\\
+  5 & \boxitorange{0.15cm}3 & 1 & -2 & 1 \\
+  6 & \boxitorange{0.15cm}2 & 2 & 0 & 1\\
+  7 & \boxitblue{0.15cm}8 & 7 & -1 & 0 \\
+  8 & \boxitblue{0.15cm}4 & 5 & 1 & 0\\
+  \bottomrule
+  \end{tabular}
+  \end{table}
+  
+  \begin{align}
+  \scriptsize
+    Bias &= \frac{4+3+2}{3} - \frac{6+4+6+8+4}{5} \nonumber \\
+         &= 3 - 5.6 = -2.6
+  \label{eq:14}
+  \end{align}
+  
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{HTE bias}
+  
+  \textcolor{orange}{HTE bias}: the difference in \textit{returns to treatment} (the treatment effect) between the treatment and control group, multiplied by the share of the population in control.\bigskip
+  
+  \begin{table}[!ht]
+  \centering
+  \scriptsize
+  \begin{tabular}{c c c c c}
+  \toprule
+  \textbf{Student (\textit{i})} & \multicolumn{3}{c}{\textbf{Prejudice}} & \textbf{Contact} \\
+  & $y_{0i}$ & $y_{1i}$ & \textcolor{orange}{$\delta_i$} &  \\
+  \midrule
+  1 & 6 & 5 & \boxitblue{0.15cm}-1 & 0 \\
+  2 & 4 & 2 & \boxitorange{0.15cm}-2 & 1 \\
+  3 & 4 & 4 & \boxitblue{0.15cm}0 & 0\\
+  4 & 6 & 7 & \boxitblue{0.15cm}1 & 0\\
+  5 & 3 & 1 & \boxitorange{0.15cm}-2 & 1 \\
+  6 & 2 & 2 & \boxitorange{0.15cm}0 & 1\\
+  7 & 8 & 7 & \boxitblue{0.15cm}-1 & 0 \\
+  8 & 4 & 5 & \boxitblue{0.15cm}1 & 0\\
+  \bottomrule
+  \end{tabular}
+  \end{table}
+
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{HTE bias}
+  
+  \begin{align}
+  \footnotesize
+    Bias &= \frac{5}{8}(\frac{-2+(-2)+0}{3} - \frac{-1+0+1+(-1)+1}{5}) \nonumber \\
+         &= \frac{5}{8}(-1.333 - 0) = -0.833
+  \label{eq:15}
+  \end{align}
+  \pause
+  Does it all add up?
+  
+  \begin{align}
+  \footnotesize
+    NATE   &= ATE + Selection\;bias + HTE\;bias \nonumber \\
+    -3.933 &= -0.5 + (-2.6) + (-0.833) \\
+    -3.933 &= -3.933 \nonumber
+  \label{eq:16}
+  \end{align}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Importance of biases}
+  
+  \begin{equation}
+    NATE = ATE + Selection\;bias + HTE\;bias
+  \end{equation}
+  
+  In our empirical work, we can't directly compute $ATE$, only $NATE$.\bigskip
+  \pause
+  
+  Using the POF, we have shown, though, that $NATE$ is a good substitute for $ATE$ only in the absence of selection bias and HTE bias.
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Importance of biases}
+  
+  \begin{table}[!ht]
+  \centering
+  \scriptsize
+  \begin{tabular}{c c c c c}
+  \toprule
+  \textbf{Student (\textit{i})} & \multicolumn{3}{c}{\textbf{Prejudice}} & \textbf{Contact} \\
+  & $y_{0i}$ & $y_{1i}$ & \textcolor{orange}{$\delta_i$} &  \\
+  \midrule
+  1 & 6 & 5 & -1 & 0 \\
+  2 & 4 & 2 & -2 & 1 \\
+  3 & 4 & 4 & 0 & 0\\
+  4 & 6 & 7 & 1 & 0\\
+  5 & 3 & 1 & -2 & 1 \\
+  6 & 2 & 2 & 0 & 1\\
+  7 & 8 & 7 & -1 & 0 \\
+  8 & 4 & 5 & 1 & 0\\
+  \bottomrule
+  \end{tabular}
+  \end{table}
+  
+  Here, biases appeared because those who had inter-ethnic contact had lower levels of prejudice (as would be expected if individuals self-select into contact).
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Tackling biases}
+  
+  If selection bias is due to differences in observables, it can easily be tackled.\bigskip
+  
+  If the bias is due to education, we can control for it statistically: contrast treatment and control groups with identical education level.\bigskip
+  
+  \pause
+  
+  A bigger challenge is in how to control for all possible factors, some of which we might not be aware of.
+  
+\end{frame}
+
+
+
+\section{Assumptions of causal identification}
+
+\begin{frame}
+  \frametitle{SUTVA: stable unit-treatment value assumption}
+  
+  Also called \textit{non-interference} by \citeA{gerber_field_2012}.\bigskip
+  
+  As its name says, it requires that the ``treatment value'' is the same across all units in the population:
+  
+  \begin{enumerate}
+    \item the treatment is of uniform intensity across units*
+    \item no externalities: one subject's potential outcome is not affected by the treatment assignment of other subjects (both in terms of mechanism and treatment effect)
+  \end{enumerate}\bigskip
+  \pause
+  
+  In our student dorm room contact experiment, how would SUTVA be violated?
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Excludability}
+  
+  The only reason for the change in potential outcomes is the treatment.\bigskip
+  
+  In our contact experiment, this would be violated if other agents (parents, campus organizations) focus efforts more on the control group.\bigskip
+  \pause
+  
+  It also breaks down when we introduce measurement asymmetries: e.g. more skilled enumerators to measure prejudice in treatment group.
+  
+\end{frame}
+
+
+\section{Value of random assignment}
+
+\begin{frame}
+  \frametitle{Random assignment}
+  
+  There are a few types (simple, complete, cluster, block), but we will discuss simple/complete sampling.\bigskip
+  
+  Defining feature: $p(d_i=1)$ is identical for all subjects. If population is $N$ and $m$ are assigned to treatment, $p = \frac{m}{N}$.\bigskip
+  \pause
+  
+  Under such conditions, treatment status is independent of potential outcomes, and all background attributes, $\boldsymbol{X}$ (\textit{ignorability}).
+  
+  \begin{equation}
+  Y_{0i}, Y_{1i}, \boldsymbol{X} \indep D_i
+    \label{eq:16}
+  \end{equation}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Mechanics of random assignment (RA)}
+  
+  Randomly select $m$ individuals out of $N$ (for our student contact study) in treatment.\bigskip
+  
+  Therefore, potential outcomes for this group of $m$ are the same (in expectation) as that for the population of $N$.
+  
+  \begin{equation}
+  \footnotesize
+  E[Y_{1i}|D_i=1] = E[Y_{1i}]
+    \label{eq:17}
+  \end{equation}
+  \pause
+  
+  The same is the case for the $N-m$ allocated to control group:
+  
+  \begin{equation}
+  \footnotesize
+  E[Y_{1i}|D_i=0] = E[Y_{1i}]
+    \label{eq:18}
+  \end{equation}
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Mechanics of random assignment (RA)}
+  
+  Putting Eq. \ref{eq:17} and \ref{eq:18} together reveals that under RA, treatment and control groups have the same expected potential outcome.
+  
+  \begin{equation}
+  \footnotesize
+  E[Y_{1i}|D_i=1] = E[Y_{1i}|D_i=0]
+    \label{eq:19}
+  \end{equation}
+  \pause
+  We also have
+  
+  \begin{equation}
+  \footnotesize
+  E[Y_{0i}|D_i=1] = E[Y_{0i}|D_i=0]
+    \label{eq:20}
+  \end{equation}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Mechanics of random assignment (RA)}
+  
+  We defined $ATE$ as
+  
+  \begin{equation}
+  ATE = E[Y_{1i}] - E[Y_{0i}]
+    \label{eq:21}
+  \end{equation}
+  
+  With RA (under Eq. \ref{eq:17} and a similar one for $E[Y_{0i}]$), we can re-write the $ATE$ as
+  
+  \begin{equation}
+  ATE = E[Y_{1i}|D_i=1] - E[Y_{0i}|D_i=0]
+    \label{eq:22}
+  \end{equation}
+  \pause
+  The two expectations in Eq. \ref{eq:22} are quantities we can observe in real life ($NATE=ATE$)!
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{RA as bias killer}
+  
+  \begin{equation}
+  \footnotesize
+  NATE = ATE + \underbrace{E[Y_0|D=1] - E[Y_0|D=0]}_{selection\;bias} + \underbrace{(1-p)(ATT-ATU)}_{HTE\;bias}
+  \end{equation}
+  
+  With RA, we know that $E[Y_{0i}|D_i=1] = E[Y_{0i}|D_i=0]$ (Eq. \ref{eq:20}): \textit{selection bias} disappears.
+  
+  \pause
+  
+  \begin{equation}
+    \begin{cases}
+    ATT = E[Y_{1i}|D_i=1] - E[Y_{0i}|D_i=1] \\
+    ATU = E[Y_{1i}|D_i=0] - E[Y_{0i}|D_i=0] 
+    \end{cases}
+    \label{eq:23}
+  \end{equation}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{RA as bias killer}
+  
+  Based on Eq. \ref{eq:23}
+  
+  \begin{scriptsize}
+    \begin{align}
+    ATT - ATU &= E[Y_{1i}|D_i=1] - E[Y_{0i}|D_i=1] - (E[Y_{1i}|D_i=0] - E[Y_{0i}|D_i=0]) \nonumber \\
+              &= \underbrace{E[Y_{1i}|D_i=1] - E[Y_{1i}|D_i=0]}_{=0 (Eq. \ref{eq:19})} + \underbrace{E[Y_{0i}|D_i=0] - E[Y_{0i}|D_i=1]}_{=0 (Eq. \ref{eq:20})}
+    \label{eq:24}
+    \end{align}
+\end{scriptsize}
+
+HTE bias is also addressed by mechanics of RA.\bigskip
+\pause
+
+\begin{equation}
+  \footnotesize
+  NATE = ATE + \underbrace{E[Y_0|D=1] - E[Y_0|D=0]}_{=0} + \underbrace{(1-p)(ATT-ATU)}_{=0}
+  \end{equation}
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{NATE \textit{unbiased} under RA}
+  
+  In this sense, under RA, NATE is an unbiased estimator of the ATE.\bigskip
+  
+  If $\theta$ is the parameter we want to estimate, such as the ATE, and $\hat{\theta}$ is an estimator for this, such as the NATE\dots
+  
+  \begin{equation}
+    \hat{\theta}\;is\;unbiased\; if\;E[\hat{\theta}] = \theta
+  \end{equation}\bigskip
+  
+  \pause
+  
+  $E[\hat{\theta}]$ is the average estimate we would get if we apply the estimator to all possible realizations of the experiment or observational study.
+  
+\end{frame}
+
+
+\section{Recap}
+
+\begin{frame}
+  \frametitle{Conclusions}
+  
+  The POF gives us:
+  
+  \begin{itemize}
+    \item the notation to clearly express important concepts like \textit{causal effect} or \textit{bias}
+    \item a world of perfect information, to illustrate the connections between these concepts
+  \end{itemize}\bigskip
+  \pause
+  
+  The real world falls short of this; we want $ATE$, but have to settle for $NATE$.\bigskip
+  
+  \begin{equation}
+    NATE = ATE + Selection\;bias + HTE\;bias
+  \end{equation}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Conclusions}
+  
+  Random assignment is a situation where $NATE = ATE$, by eliminating bias.\bigskip
+  \pause
+  
+  If properly implemented, treatment and control groups should be similar in everything except the \textit{treatment} itself.\bigskip
+  \pause
+  
+  Regression tries to achieve the same outcome, by controlling for all possible relevant differences between treatment and control groups...
+  
+\end{frame}
+
+
+
+% END
+\begin{frame}
+\begin{center}
+    \Huge Thank \textcolor{orange}{you} for the kind attention!
+\end{center}
+\end{frame}
+
+% REFERENCES %
+
+\begin{frame}
+\frametitle{References}
+\bibliographystyle{apacite}
+\bibliography{../Bibliography}
+\vspace{5cm}
+\end{frame}
+
+\end{document}

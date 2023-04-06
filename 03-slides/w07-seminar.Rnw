@@ -1,0 +1,594 @@
+\documentclass[12pt,english,dvipsnames,aspectratio=169,handout]{beamer}
+\usepackage{fontspec}
+\setsansfont[Mapping=tex-text]{Fira Sans}
+\setcounter{secnumdepth}{4}
+\setcounter{tocdepth}{4}
+\usepackage[normalem]{ulem}
+\usepackage[T1]{fontenc}
+\usepackage{dcolumn}
+\usepackage{booktabs}
+\usepackage{bm}
+\usepackage{setspace}
+\makeatletter
+\usetheme{metropolis}
+\setbeamertemplate{frame footer}{Bosancianu | Schaub | Hertie School}
+\setbeamerfont{page number in head/foot}{size=\tiny}
+\setbeamercolor{footline}{fg=gray}
+\usepackage{xcolor}
+\setbeamercovered{dynamic}
+\usepackage{tikz}
+\usetikzlibrary{arrows, positioning,fit,shapes.misc}
+\usepackage[labelformat=empty]{caption}
+% For table captions in Beamer
+\usepackage[sectionbib]{apacite}
+\renewcommand{\bibliographytypesize}{\footnotesize}
+\makeatletter
+\let\st@rtbibsection\@bibnewpage
+\let\st@rtbibchapter\@bibnewpage
+\makeatother
+\usepackage{amsmath, mathtools}
+\usepackage{xunicode}
+\usepackage{hyperref}
+\graphicspath{{./figures/}} 
+% Defines a checkmark
+\def\checkmark{\tikz\fill[scale=0.4,color=orange](0,.35) -- (.25,0) -- (1,.7) -- (.25,.15) -- cycle;}
+\newcommand{\indep}{\perp \!\!\!\! \perp}
+\setbeamertemplate{itemize items}{\checkmark}
+\usepackage{multirow}
+\hypersetup{pdfauthor={Bosancianu and Schaub},
+	pdftitle={Statistical Modeling and Causal Inference with R},
+	pdfsubject={Week 7: Regression Discontinuity Designs},
+	pdfkeywords={Berlin, Hertie, 2020, week 7, RDD}}
+% FOR UNIFORM DENSITY
+\usepackage{pgfplots}
+\makeatletter
+\long\def\ifnodedefined#1#2#3{%
+    \@ifundefined{pgf@sh@ns@#1}{#3}{#2}%
+}
+\pgfplotsset{
+    discontinuous/.style={
+    scatter,
+    scatter/@pre marker code/.code={
+        \ifnodedefined{marker}{
+            \pgfpointdiff{\pgfpointanchor{marker}{center}}%
+             {\pgfpoint{0}{0}}%
+             \ifdim\pgf@y>0pt
+                \tikzset{options/.style={mark=*}}
+                \draw [densely dashed] (marker-|0,0) -- (0,0);
+                \draw plot [mark=*,mark options={fill=white}] coordinates {(marker-|0,0)};
+             \else
+                \ifdim\pgf@y<0pt
+                    \tikzset{options/.style={mark=*,fill=white}}
+                    \draw [densely dashed] (marker-|0,0) -- (0,0);
+                    \draw plot [mark=*] coordinates {(marker-|0,0)};
+                \else
+                    \tikzset{options/.style={mark=none}}
+                \fi
+             \fi
+        }{
+            \tikzset{options/.style={mark=none}}        
+        }
+        \coordinate (marker) at (0,0);
+        \begin{scope}[options]
+    },
+    scatter/@post marker code/.code={\end{scope}}
+    }
+}
+\makeatother
+\title{\textsc{Statistical Modeling and Causal Inference with R}}
+\subtitle{Week 7: Regression Discontinuity Designs}
+\date{October 26, 2020}
+\author{Manuel Bosancianu \hfill Max Schaub}
+\institute{Hertie School of Governance}
+\begin{document}
+\maketitle
+
+<<r setup-main, echo=FALSE, include=FALSE>>=
+knitr::opts_chunk$set(
+	echo = FALSE,
+	error = FALSE,
+	message = FALSE,
+	warning = FALSE,
+	cache = FALSE,
+	comment = NA
+)
+
+library(pacman)
+p_load(tidyverse, readstata13, ggthemes, scales, rdrobust,
+       knitr, kableExtra)
+@
+
+
+\section{Introduction}
+
+\begin{frame}
+\frametitle{RDD features}
+
+\begin{itemize}
+\item a score / running variable / forcing variable / index
+\item a cutoff / threshold
+\item a treatment
+\end{itemize}
+\pause
+\bigskip
+
+$P_{assignment}$ changes discontinuously at the threshold.
+
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Sharp RDD}
+The \citeA{fujiwara_voting_2015} study is an example of \textit{sharp} RDD:
+
+\begin{itemize}
+  \item all 307 municipalities above 40,500 registered voters used EV
+  \item 4,967 out of 4,974 municipalities below 40,500 registered voters used paper ballots
+\end{itemize}
+\pause
+\bigskip
+
+\begin{equation}
+  \tau = \lim_{\upsilon_m \downarrow 40,500}E[Y_m | \upsilon_m] - \lim_{\upsilon_m \uparrow 40,500}E[Y_m | \upsilon_m]
+  \label{eq:01}
+\end{equation}
+
+
+\end{frame}
+
+
+ 
+\begin{frame}
+\frametitle{Estimating RD effects}
+
+\begin{columns}
+	\begin{column}{0.35\textwidth}
+	Uses linear regressions, without any weights (``rectangular'' kernel).\bigskip
+	
+	Here, $c=0$ and $h=1$.
+	\end{column}
+	\begin{column}{0.65\textwidth}
+		\begin{tikzpicture}[
+    declare function={unipdf(\x,\xl,\xu)= (\x>=\xl)*(\x<\xu)*1/(\xu-\xl);},
+    scale = 0.9]
+
+\begin{axis}[
+    samples=11,
+    jump mark left,
+    ymin=0,ymax=1,
+    xmin=-5, xmax=5,
+    every axis plot/.style={very thick},
+    discontinuous
+]
+\addplot [orange] {unipdf(x,-1,1)};
+\end{axis}
+\end{tikzpicture}
+	\end{column}
+\end{columns}
+
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Estimating RD effects}
+Assume that:
+
+$V_m$ are the registered voters in municipality $m$, and that
+
+\begin{equation}
+D = \begin{cases}
+0, & if\; V_m < 40,500 \\
+1, & if\; V_m \geq 40,500 
+\end{cases}
+\label{eq:02}
+\end{equation}
+
+\begin{equation}
+Y_m = \beta_0 + \tau D_m + \beta_1V_m + \beta_2V_mD_m + \epsilon_m  
+  \label{eq:03}
+\end{equation}
+\pause
+
+What kind of regression \textcolor{orange}{characteristics} is this assuming? What  \textcolor{orange}{assumptions} are implicit? 
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Linear model \& different slope}
+
+\begin{figure}
+\centering
+\includegraphics[scale=0.35]{../04-figures/07/10.pdf}
+\end{figure}
+\pause
+
+\begin{itemize}
+\footnotesize
+\item linearity: regressions are linear in $V_m$
+\item varying treatment effect ($\tau$) along $V$
+\end{itemize}
+
+\end{frame}
+
+
+\section{Results}
+
+\begin{frame}
+\frametitle{Is there a jump at cutoff?}
+
+\begin{figure}
+\centering
+\includegraphics[scale=0.4]{../04-figures/07/19.PNG}
+\caption{Figure 2 (p.~435)}
+\end{figure}
+
+Why are the other two election years provided here?
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Effect of introducing EV}
+
+\begin{figure}
+\centering
+\includegraphics[scale=0.4]{../04-figures/07/20-1.PNG}
+\caption{Table 2 (p.~436)}
+\end{figure}
+
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Placebo tests}
+
+\begin{figure}
+\centering
+\includegraphics[scale=0.4]{../04-figures/07/20-2.PNG}
+\caption{Table 2 (p.~436)}
+\end{figure}
+
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Parties favored}
+
+\begin{figure}
+\centering
+\includegraphics[scale=0.4]{../04-figures/07/22.PNG}
+\caption{Table 3 (p.~439)}
+\end{figure}
+
+\end{frame}
+
+\section{Validity checks}
+ 
+\begin{frame}
+\frametitle{Falsification and validity}
+
+What were the 5 types of \textcolor{orange}{falsification} and \textcolor{orange}{validity} tests?\pause
+\bigskip
+
+\begin{enumerate}
+\item null effect on pre-treatment covariates and placebo outcomes
+\item score density continuity around cutoff
+\item treatment effect at artificial cutoff values
+\item excluding observations near cutoff
+\item sensitivity to bandwidth choices
+\end{enumerate}
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Bandwidth sensitivity}
+
+\begin{figure}
+\centering
+\includegraphics[scale=0.4]{../04-figures/07/20-1.PNG}
+\includegraphics[scale=0.48]{../04-figures/07/20-3.PNG}
+\caption{Table 2 (p.~436)}
+\end{figure}
+
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Null effect on pre-treatment covariates}
+
+\begin{figure}
+\centering
+\includegraphics[scale=0.3]{../04-figures/07/21.PNG}
+\caption{Table 1 (p.~434)}
+\end{figure}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Score density around cutoff}
+
+\begin{columns}
+	\begin{column}{0.35\textwidth}
+	Danger here is that we may be dealing with sorting.\bigskip
+	
+	Discussed in text as implausible---\textcolor{orange}{why?}
+	\end{column}\pause
+	\begin{column}{0.65\textwidth}
+		\begin{figure}
+    \centering
+    \visible<2>{\includegraphics[scale=0.4]{../04-figures/07/23.PNG}}
+    \visible<2>{\caption{Figure A2}}
+    \end{figure}
+	\end{column}
+\end{columns}
+
+
+\end{frame}
+
+
+\begin{frame}[fragile]
+\frametitle{Score density: testing}
+
+<<r read-data, eval=TRUE>>=
+df_brazil <- read.dta13(file = "../02-data/07-fujiwara.dta",
+                        convert.factors = FALSE)
+@
+
+<<r basic-recoding, eval=TRUE>>=
+df_brazil <- df_brazil %>% 
+  mutate(voters_bin = case_when(voters96 >= 28500 & voters96 < 32500 ~ 1,
+                                voters96 >= 32500 & voters96 < 36500 ~ 2,
+                                voters96 >= 36500 & voters96 < 40500 ~ 3,
+                                voters96 >= 40500 & voters96 < 44500 ~ 4,
+                                voters96 >= 44500 & voters96 < 48500 ~ 5,
+                                voters96 >= 48500 & voters96 < 52500 ~ 6))
+@
+
+<<r summary-table-1, eval=FALSE>>=
+df_brazil %>% 
+  group_by(voters_bin) %>% 
+  summarise(N = n()) %>% 
+  na.omit() %>% 
+  mutate(voters_bin = case_when(voters_bin == 1 ~ "28,500-32,500",
+                                voters_bin == 2 ~ "32,500-36,500",
+                                voters_bin == 3 ~ "36,500-40,500",
+                                voters_bin == 4 ~ "40,500-44,500",
+                                voters_bin == 5 ~ "44,500-48,500",
+                                voters_bin == 6 ~ "48,500-52,500")) %>% 
+  rename(`Registered voters` = voters_bin) %>% 
+  kbl(caption = "Number of cases in bins",
+      booktabs = TRUE,
+      linesep = "") %>%
+  kable_styling(full_width = FALSE,
+                latex_options = "striped")
+@
+
+\begin{table}
+\centering
+\footnotesize
+\caption{Number of cases in bins}
+\begin{tabular}{l c}
+\toprule
+  Registered voters & N \\
+\midrule
+28,500-32,500 & 55 \\
+32,500-36,500 & 57 \\
+36,500-40,500 & 63 \\
+40,500-44,500 & 36 \\
+44,500-48,500 & 20 \\
+48,500-52,500 & 35 \\
+\bottomrule
+\end{tabular}
+\label{tab:01}
+\end{table}
+\pause
+
+<<r show-code-1, eval=FALSE, echo=TRUE>>=
+binom.test(36, 99, p = 0.5)
+@
+
+\end{frame}
+
+
+\begin{frame}[fragile]
+\frametitle{Score density: testing}
+
+{\tiny
+<<r test-density>>=
+binom.test(36, 99, p = 0.5)
+@
+}\pause
+
+Argument about timing of EV announcement cutoff is more convincing.
+
+\end{frame}
+
+
+\begin{frame}[fragile]
+\frametitle{Artificial cutoffs}
+What was the logic here?\bigskip
+\pause
+
+<<r cutoffs-test, eval=FALSE, echo=FALSE>>=
+out1 <- rdrobust(df_brazil$r_util98,
+                 df_brazil$voters96,
+                 c = 40500,
+                 kernel = "triangular",
+                 p = 1,
+                 bwselect = "mserd")
+out2 <- rdrobust(df_brazil$r_util98,
+                 df_brazil$voters96,
+                 c = 36500,
+                 kernel = "triangular",
+                 p = 1,
+                 bwselect = "mserd")
+out3 <- rdrobust(df_brazil$r_util98,
+                 df_brazil$voters96,
+                 c = 32500,
+                 kernel = "triangular",
+                 p = 1,
+                 bwselect = "mserd")
+out4 <- rdrobust(df_brazil$r_util98,
+                 df_brazil$voters96,
+                 c = 28500,
+                 kernel = "triangular",
+                 p = 1,
+                 bwselect = "mserd")
+out5 <- rdrobust(df_brazil$r_util98,
+                 df_brazil$voters96,
+                 c = 44500,
+                 kernel = "triangular",
+                 p = 1,
+                 bwselect = "mserd")
+out6 <- rdrobust(df_brazil$r_util98,
+                 df_brazil$voters96,
+                 c = 48500,
+                 kernel = "triangular",
+                 p = 1,
+                 bwselect = "mserd")
+out7 <- rdrobust(df_brazil$r_util98,
+                 df_brazil$voters96,
+                 c = 52500,
+                 kernel = "triangular",
+                 p = 1,
+                 bwselect = "mserd")
+
+df_results <- data.frame(coef = c(out1$coef[1], out2$coef[1], out3$coef[1],
+                                  out4$coef[1], out5$coef[1], out6$coef[1],
+                                  out7$coef[1]),
+                         se = c(out1$se[1], out2$se[1], out3$se[1], out4$se[1],
+                                out5$se[1], out6$se[1], out7$se[1]),
+                         n = c(40500, 36500, 32500, 28500, 44500, 48500,
+                               52500))
+rm(out1, out2, out3, out4, out5, out6, out7)
+
+graph1 <- ggplot(df_results,
+                 aes(x = n, y = coef)) +
+  geom_point(size = 4, color = "orange") +
+  labs(x = "Cutoff",
+       y = "Treatment effect") +
+  geom_linerange(aes(ymax = coef + 1.96 * se,
+                     ymin = coef - 1.96 * se,
+                     x = n),
+                 linewidth = 1.25) +
+  theme_minimal() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_x_continuous(breaks = c(28500, 32500, 36500, 40500, 44500,
+                                48500, 52500))
+ggsave(graph1,
+       filename = "../04-figures/07/24.pdf",
+       height = 4,
+       width = 7)
+@
+
+\begin{figure}
+\centering
+\visible<2>{\includegraphics[scale=0.5]{../04-figures/07/24.pdf}}
+\end{figure}
+
+\end{frame}
+
+
+\begin{frame}
+\frametitle{``Doughnut hole'' test}
+What was the logic here?\bigskip
+\pause
+
+I re-ran the model with gradually eliminating municipalities in bins of 500 registered voters on either side of cutoff.
+
+<<r doughnut-hole-test, eval=FALSE, echo=FALSE>>=
+df_brazil <- df_brazil %>%
+  mutate(r_util98_1 = if_else(voters96 >= 40000 & voters96 < 41000,
+                              NA_real_, r_util98),
+         r_util98_2 = if_else(voters96 >= 39500 & voters96 < 41500,
+                              NA_real_, r_util98),
+         r_util98_3 = if_else(voters96 >= 39000 & voters96 < 42000,
+                              NA_real_, r_util98),
+         r_util98_4 = if_else(voters96 >= 38500 & voters96 < 42500,
+                              NA_real_, r_util98),
+         r_util98_5 = if_else(voters96 >= 38000 & voters96 < 43000,
+                              NA_real_, r_util98))
+
+out1 <- rdrobust(df_brazil$r_util98_1,
+                 df_brazil$voters96,
+                 c = 40500,
+                 kernel = "triangular",
+                 p = 1,
+                 bwselect = "mserd")
+out2 <- rdrobust(df_brazil$r_util98_2,
+                 df_brazil$voters96,
+                 c = 40500,
+                 kernel = "triangular",
+                 p = 1,
+                 bwselect = "mserd")
+out3 <- rdrobust(df_brazil$r_util98_3,
+                 df_brazil$voters96,
+                 c = 40500,
+                 kernel = "triangular",
+                 p = 1,
+                 bwselect = "mserd")
+out4 <- rdrobust(df_brazil$r_util98_4,
+                 df_brazil$voters96,
+                 c = 40500,
+                 kernel = "triangular",
+                 p = 1,
+                 bwselect = "mserd")
+out5 <- rdrobust(df_brazil$r_util98_5,
+                 df_brazil$voters96,
+                 c = 40500,
+                 kernel = "triangular",
+                 p = 1,
+                 bwselect = "mserd")
+
+df_results <- data.frame(coef = c(0.1202991, out1$coef[1], out2$coef[1], 
+                                  out3$coef[1], out4$coef[1], out5$coef[1]),
+                         se = c(0.01614713, out1$se[1], out2$se[1], out3$se[1], 
+                                out4$se[1], out5$se[1]),
+                         n = c(0, 500, 1000, 1500, 2000, 2500))
+rm(out1, out2, out3, out4, out5)
+
+graph2 <- ggplot(df_results,
+                 aes(x = n, y = coef)) +
+  geom_point(size = 4, color = "orange") +
+  labs(x = "Window of exclusion",
+       y = "Treatment effect") +
+  geom_linerange(aes(ymax = coef + 1.96*se,
+                     ymin = coef - 1.96*se,
+                     x = n),
+                 linewidth = 1.25) +
+  theme_minimal() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_x_continuous(breaks = c(0, 500, 1000, 1500, 2000, 2500))
+ggsave(graph2,
+       filename = "../04-figures/07/25.pdf",
+       height = 4,
+       width = 7)
+@
+
+\end{frame}
+
+\begin{frame}
+\frametitle{``Doughnut hole'' test}
+
+\begin{figure}
+\centering
+\includegraphics[scale=0.6]{../04-figures/07/25.pdf}
+\end{figure}
+
+\end{frame}
+
+
+% END
+\begin{frame}
+\begin{center}
+    \Huge Thank \textcolor{orange}{you} for the kind attention!
+\end{center}
+\end{frame}
+
+% REFERENCES %
+
+\begin{frame}[allowframebreaks]
+\bibliographystyle{apacite}
+\scriptsize\bibliography{../Bibliography}
+\end{frame}
+
+\end{document}

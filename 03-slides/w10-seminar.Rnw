@@ -1,0 +1,405 @@
+\documentclass[12pt,english,dvipsnames,aspectratio=169,handout]{beamer}
+\usepackage{fontspec}
+\setsansfont[Mapping=tex-text]{Fira Sans}
+\setcounter{secnumdepth}{4}
+\setcounter{tocdepth}{4}
+\usepackage[normalem]{ulem}
+\usepackage[T1]{fontenc}
+\usepackage{dcolumn}
+\usepackage{booktabs}
+\usepackage{bm}
+\usepackage{setspace}
+\makeatletter
+\usetheme{metropolis}
+\setbeamertemplate{frame footer}{Bosancianu | Schaub | Hertie School}
+\setbeamerfont{page number in head/foot}{size=\tiny}
+\setbeamercolor{footline}{fg=gray}
+\usepackage{xcolor}
+\setbeamercovered{transparent}
+\usepackage{tikz}
+\usetikzlibrary{arrows, positioning,fit,shapes.misc}
+\usepackage[labelformat=empty]{caption}
+% For table captions in Beamer
+\usepackage[sectionbib]{apacite}
+\renewcommand{\bibliographytypesize}{\footnotesize}
+\makeatletter
+\let\st@rtbibsection\@bibnewpage
+\let\st@rtbibchapter\@bibnewpage
+\makeatother
+\usepackage{amsmath, mathtools}
+\usepackage{xunicode}
+\usepackage{hyperref}
+\graphicspath{{./figures/}} 
+% Defines a checkmark
+\def\checkmark{\tikz\fill[scale=0.4,color=orange](0,.35) -- (.25,0) -- (1,.7) -- (.25,.15) -- cycle;}
+% Code for circles in Table cells
+\newcounter{nodemarkers}
+\newcommand\circletext[1]{%
+    \tikz[overlay,remember picture] 
+        \node (marker-\arabic{nodemarkers}-a) at (0,1.5ex) {};%
+    #1%
+    \tikz[overlay,remember picture]
+        \node (marker-\arabic{nodemarkers}-b) at (0,0){};%
+    \tikz[overlay,remember picture,inner sep=2pt]
+        \node[draw,ellipse,fit=(marker-\arabic{nodemarkers}-a.center) (marker-\arabic{nodemarkers}-b.center)] {};%
+    \stepcounter{nodemarkers}%
+}
+% wide itemize and enumerate
+\newenvironment{wideitemize}{\itemize\addtolength{\itemsep}{.3em}}{\enditemize}
+\newenvironment{wideenumerate}{\enumerate\addtolength{\itemsep}{.3em}}{\endenumerate}
+% boxes
+\def\boxitorange#1{%
+  \smash{\color{orange}\fboxrule=1pt\relax\fboxsep=2pt\relax%
+  \llap{\rlap{\fbox{\vphantom{0}\makebox[#1]{}}}~}}\ignorespaces
+}
+\def\boxitblue#1{%
+  \smash{\color{blue}\fboxrule=1pt\relax\fboxsep=2pt\relax%
+  \llap{\rlap{\fbox{\vphantom{0}\makebox[#1]{}}}~}}\ignorespaces
+}
+\newcommand{\indep}{\perp \!\!\!\! \perp}
+\setbeamertemplate{itemize items}{\checkmark}
+\usepackage{multirow}
+\hypersetup{pdfauthor={Bosancianu and Schaub},
+	pdftitle={Statistical Modeling and Causal Inference with R},
+	pdfsubject={Week 10: Moderation and heterogeneous effects},
+	pdfkeywords={Berlin, Hertie, 2020, week 8}}
+\title{\textsc{Statistical Modeling and Causal Inference with R}}
+\subtitle{Week 10: Moderation and heterogeneous effects}
+\date{November 16, 2020}
+\author{Manuel Bosancianu \hfill Max Schaub}
+\institute{Hertie School of Governance}
+\begin{document}
+\maketitle
+
+
+\begin{frame}
+	\frametitle{Lecture Q\&A}
+	\begin{itemize} \large
+		\item Open Q\&A 
+		\item Remarks on assignments
+		\item Quiz interpreting regression coefficients
+	\end{itemize}
+\end{frame}
+
+
+\begin{frame}
+	\frametitle{Remarks on assignments}
+\footnotesize
+
+	\begin{enumerate}
+		\item Don't leave working on the assignment until shortly before the deadline -- this makes it impossible to get help; when running into serious problems (e.g.\ getting stuck for a couple of hours), seek help in the group or from the TAs
+		\item Find a good `balance-table' routine from the tutorials by Adelaida and Sebastian, and use it consistently -- balance tables are very useful (and will be asked for in the exam)
+	  \item Do read the question wording very carefully -- often, points are lost because you do something that's not been asked for.
+		\item Technical note: Turn off scientific notification in R since this seems to lead to confusion; turn it off (options(scipen=999))
+	\end{enumerate}
+\end{frame}
+
+
+
+\begin{frame}
+	\frametitle{Quiz interpreting regression coefficients}
+\footnotesize
+
+  What you need:
+	\begin{itemize}
+		\item A calculator (or being quick at mental arithmetic)
+		\item Knowledge of the lecture slides
+	\end{itemize}
+
+  Instructions:
+	\begin{itemize}
+		\item Calculate the response
+		\item Post your answer in the poll at \url{https://www.menti.com/tjphg6xova}
+	\end{itemize}
+
+\end{frame}
+
+
+
+\begin{frame}
+	\frametitle{Quiz interpreting regression coefficients}
+\footnotesize
+
+You are estimating the effect of a mentoring program on income. 
+  
+For the evaluation 185 individuals were randomly assigned to a treatment group that received mentoring, while 185 were assigned to a control group that did not. 
+
+You now have data on their incomes 15 months after the intervention. In order to estimate the effect, you are using OLS regression models. 
+
+You start with the simple model in the form:
+
+\normalsize\vspace{3mm}
+\textcolor{orange}{Model 1}: ${Y}_i = \beta_0 + \beta_1 {D}_i + \mu_i$
+\footnotesize
+
+Where $Y_i$ stands for program participants' income and $D_i$ for the mentoring program.
+
+\end{frame}
+
+
+\begin{frame}
+	\frametitle{Quiz interpreting regression coefficients}
+\footnotesize
+The results are shown here:
+
+\centering
+\tiny
+Model: ${Y}_i = \beta_0 + \beta_1 {D}_i + \mu_i$
+
+\scriptsize
+\begin{tabular}{l*{1}{c}}
+\toprule
+          &\multicolumn{1}{c}{Income}\\
+\midrule
+Mentoring     &     2213\textsuperscript{**}\\
+          &    (717)        \\
+Intercept    &     4574\textsuperscript{**}\\
+          &    (507)        \\
+\midrule
+N         &      370        \\
+\bottomrule
+\multicolumn{2}{l}{Standard errors in parentheses. \textsuperscript{†} \(p<0.1\), \textsuperscript{*} \(p<0.05\), \textsuperscript{**} \(p<0.01\)}\\
+\end{tabular}
+
+\footnotesize\flushleft
+
+\textcolor{orange}{Q1: What is the treatment effect, i.e.\ the partial effect $\frac{\partial Y_i}{\partial {D}_i}$ of the mentoring program?}\\
+\textcolor{blue}{Answer: $\beta_1 = 2213$}
+
+\end{frame}
+
+
+\begin{frame}
+	\frametitle{Quiz interpreting regression coefficients}
+\centering
+\tiny
+Model: ${Y}_i = \beta_0 + \beta_1 {D}_i + \mu_i$
+
+\scriptsize
+\begin{tabular}{l*{1}{c}}
+\toprule
+          &\multicolumn{1}{c}{Income}\\
+\midrule
+Mentoring     &     2213\textsuperscript{**}\\
+          &    (717)        \\
+Intercept    &     4574\textsuperscript{**}\\
+          &    (507)        \\
+\midrule
+N         &      370        \\
+\bottomrule
+\multicolumn{2}{l}{Standard errors in parentheses. \textsuperscript{†} \(p<0.1\), \textsuperscript{*} \(p<0.05\), \textsuperscript{**} \(p<0.01\)}\\
+\end{tabular}
+\footnotesize\flushleft
+
+\textcolor{orange}{Q2: What is the income of those not in the mentoring program $E[Y_i|D_i=0]$?}\\
+\textcolor{blue}{Answer: $\beta_0 = 4574$}
+
+\end{frame}
+
+
+
+\begin{frame}
+	\frametitle{Quiz interpreting regression coefficients}
+\centering
+\tiny
+Model: ${Y}_i = \beta_0 + \beta_1 {D}_i + \mu_i$
+
+\scriptsize
+\begin{tabular}{l*{1}{c}}
+\toprule
+          &\multicolumn{1}{c}{Income}\\
+\midrule
+Mentoring     &     2213\textsuperscript{**}\\
+          &    (717)        \\
+Intercept    &     4574\textsuperscript{**}\\
+          &    (507)        \\
+\midrule
+N         &      370        \\
+\bottomrule
+\multicolumn{2}{l}{Standard errors in parentheses. \textsuperscript{†} \(p<0.1\), \textsuperscript{*} \(p<0.05\), \textsuperscript{**} \(p<0.01\)}\\
+\end{tabular}
+\footnotesize\flushleft
+
+\textcolor{orange}{Q3: What is the average income for the whole sample $E[Y_i]$?}\\
+\textcolor{blue}{Answer: Weighted average $\frac{185}{370}\times \beta_0 + \frac{185}{370}\times (\beta_0 + \beta_1) = 0.5*4574+0.5*(4574 + 2213)=5680.5$}
+
+\end{frame}
+
+
+
+
+\begin{frame}
+	\frametitle{Quiz interpreting regression coefficients}
+\footnotesize
+
+Now to improve the efficiency of your estimates, you add an indicator recording whether the participants have a Masters degree. 
+
+This is the indicator U that takes the value 1 for those with a Masters degree (87/370), and 0 for those without (283/370).
+
+This means your second model takes the form:
+
+\normalsize\vspace{3mm}
+\textcolor{orange}{Model 2}: ${Y}_i = \beta_0 + \beta_1 D_i + \beta_2 U_i + \epsilon_i$
+\footnotesize
+
+\vspace{25mm}
+
+\end{frame}
+
+
+
+\begin{frame}
+	\frametitle{Quiz interpreting regression coefficients}
+\centering
+\tiny
+Model: ${Y}_i = \beta_0 + \beta_1 D_i + \beta_2 U_i + \epsilon_i$
+
+\scriptsize
+\centering
+\begin{tabular}{l*{1}{c}}
+\toprule
+          &\multicolumn{1}{c}{Income}\\
+\midrule
+Mentoring     &     1962\textsuperscript{**}\\
+          &    (718)        \\
+Masters degree    &     2216\textsuperscript{**}\\
+          &    (847)        \\
+Intercept    &     4178\textsuperscript{**}\\
+          &    (525)        \\
+\midrule
+N         &      370        \\
+\bottomrule
+\multicolumn{2}{l}{Standard errors in parentheses. \textsuperscript{†} \(p<0.1\), \textsuperscript{*} \(p<0.05\), \textsuperscript{**} \(p<0.01\)}\\
+\end{tabular}
+\footnotesize\flushleft
+
+\textcolor{orange}{Q4: What is the income of those in the mentoring program but without a Masters degree $E[Y_i|D_i=1,U_i=0]$?}\\
+\textcolor{blue}{Answer: $\beta0 + \beta1 = 4178+1962 = 6140$}
+
+\end{frame}
+
+
+
+\begin{frame}
+	\frametitle{Quiz interpreting regression coefficients}
+\footnotesize
+
+You suspect that the mentoring program has a different effect for those with a Masters degree vs. those without. You therefore estimate an interaction model in the form:
+
+\normalsize\vspace{3mm}
+\textcolor{orange}{Model 3}: ${Y}_i = \beta_0 + \beta_1 D_i + \beta_2 U_i + \beta_3 D_i\times U_i + \mu_i$
+\footnotesize
+
+\vspace{25mm}
+
+\end{frame}
+
+
+
+\begin{frame}
+	\frametitle{Quiz interpreting regression coefficients}
+\centering
+\tiny
+Model: ${Y}_i = \beta_0 + \beta_1 D_i + \beta_2 U_i + \beta_3 D_i\times U_i + \mu_i$
+
+\scriptsize
+\begin{tabular}{l*{1}{c}}
+\toprule
+          &\multicolumn{1}{c}{Income}\\
+\midrule
+Mentoring     &     1048        \\
+          &    (811)        \\
+Masters degree    &     -156        \\
+          &   (1306)        \\
+Mentoring $\times$ Masters degree &     4053\textsuperscript{*} \\
+          &   (1708)        \\
+Intercept    &     4601\textsuperscript{**}\\
+          &    (552)        \\
+\midrule
+N         &      370        \\
+\bottomrule
+\multicolumn{2}{l}{Standard errors in parentheses. \textsuperscript{†} \(p<0.1\), \textsuperscript{*} \(p<0.05\), \textsuperscript{**} \(p<0.01\)}\\
+\end{tabular}
+\footnotesize\flushleft
+
+\textcolor{orange}{Q5: What is the effect of the treatment for those without a Masters degree $\frac{\partial Y_i}{\partial D_i, U_i=0}$?} \textcolor{blue}{Answer: $\beta1  = 1048$}
+
+\end{frame}
+
+
+
+\begin{frame}
+	\frametitle{Quiz interpreting regression coefficients}
+\centering
+\tiny
+Model: ${Y}_i = \beta_0 + \beta_1 D_i + \beta_2 U_i + \beta_3 D_i\times U_i + \mu_i$
+
+\scriptsize
+\begin{tabular}{l*{1}{c}}
+\toprule
+          &\multicolumn{1}{c}{Income}\\
+\midrule
+Mentoring     &     1048        \\
+          &    (811)        \\
+Masters degree    &     -156        \\
+          &   (1306)        \\
+Mentoring $\times$ Masters degree &     4053\textsuperscript{*} \\
+          &   (1708)        \\
+Intercept    &     4601\textsuperscript{**}\\
+          &    (552)        \\
+\midrule
+N         &      370        \\
+\bottomrule
+\multicolumn{2}{l}{Standard errors in parentheses. \textsuperscript{†} \(p<0.1\), \textsuperscript{*} \(p<0.05\), \textsuperscript{**} \(p<0.01\)}\\
+\end{tabular}
+\scriptsize\flushleft
+
+\textcolor{orange}{Q6: What is the effect of the treatment for those \textbf{with} a Masters degree $\frac{\partial Y_i}{\partial D_i, U_i=1}$? And, Q7, what is the difference between the treatment effects?}\\
+\textcolor{blue}{Answer Q6: $\beta1 + \beta3 = 1048 + 4053 =5101$, Answer Q7: $\beta3 = 4053, p<0.01$ as per regression table.}
+
+\end{frame}
+
+
+
+\begin{frame}
+	\frametitle{Quiz interpreting regression coefficients}
+\centering
+\tiny
+Model: ${Y}_i = \beta_0 + \beta_1 D_i + \beta_2 U_i + \beta_3 D_i\times U_i + \mu_i$
+
+\scriptsize
+\begin{tabular}{l*{1}{c}}
+\toprule
+          &\multicolumn{1}{c}{Income}\\
+\midrule
+Mentoring     &     1048        \\
+          &    (811)        \\
+Masters degree    &     -156        \\
+          &   (1306)        \\
+Mentoring $\times$ Masters degree &    4053\textsuperscript{*} \\
+          &   (1708)        \\
+Intercept    &     4601\textsuperscript{**}\\
+          &    (552)        \\
+\midrule
+N         &      370        \\
+\bottomrule
+\multicolumn{2}{l}{Standard errors in parentheses. \textsuperscript{†} \(p<0.1\), \textsuperscript{*} \(p<0.05\), \textsuperscript{**} \(p<0.01\)}\\
+\end{tabular}
+
+\tiny{Remember that 87/370 participants have a Masters degree, and 283/370 don't.}
+\scriptsize\flushleft
+
+\textcolor{orange}{Q8: What is the \textbf{overall} effect of the mentoring program, i.e.\ the partial effect $\frac{\partial Y_i}{\partial D_i}$?}\\
+\textcolor{blue}{Answer: Weighted average $\frac{283}{370}\beta_1 + \frac{87}{370}\times (\beta_1 + \beta_3) = 1048*(283/370)+5101*(87/370)=2001$}
+
+\end{frame}
+
+
+% END
+\begin{frame}
+\begin{center}
+    \LARGE Thank you for watching, and see you next Monday!
+\end{center}
+\end{frame}
+
+\end{document}
