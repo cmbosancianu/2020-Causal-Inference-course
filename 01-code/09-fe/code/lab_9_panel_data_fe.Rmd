@@ -1,0 +1,312 @@
+---
+title: "Session 9 - Panel Data and Fixed Effects Specifications"
+output:
+  html_document:
+    theme: journal
+    toc: yes
+    toc_float:
+      collapsed: false
+     
+---
+
+## Measuring the effect of a carbon tax on national carbon dioxide emissions per capita
+<br>
+You are hired as an outside consultant by the Organization of Economic Non-Cooperation for Development (OENCD), they are interested in studying the effect of a carbon tax on national carbon dioxide emissions per capita. You are provided with data for the twenty-members of the organization from 2009 to 2019. *The data can be called a balanced panel based on the description given in the lecture (i.e. each panel member is observed every year)*
+
+<p>
+<center>
+<img src="https://news.mit.edu/sites/default/files/styles/news_article__image_gallery/public/images/201804/MIT-Carbon-Pricing_0.jpg?itok=KsqzQi8F"/></center>
+
+<br>
+<br>
+
+---
+
+## 1.1 Exploring the data
+
+```{r warning=FALSE, message=FALSE}
+
+set.seed(42) #for consistent results
+
+library(dplyr) # to wrangle our data
+library(tidyr) # to wrangle our data - pivot_longer()
+library(ggplot2) # to render our graphs
+library(readr) # for loading the .csv data
+library(lmtest) # to gather our clustered standard errors - coeftest()
+library(plm)  # to gather our clustered standard errors - vcovHC() and plm()
+library(kableExtra) # to render better formatted tables
+library(stargazer) # for formatting your model output
+library(lubridate) # for working with dates-times in a more intuitive manner
+
+carbon_tax_df <- readr::read_csv("https://raw.githubusercontent.com/seramirezruiz/stats-ii-lab/master/Session%207/data/carbon_tax_df.csv") # simulated data
+names(carbon_tax_df) # to check the names of the variables in our data
+
+```
+
+<br>
+Our dataset *carbon_tax_df*, contains the following information:
+
++ `country_name`: Name of the country
++ `country_code`: Three-letter country code
++ `year`: Year
++ `tax`: Dummy for whether the carbon tax was in place
++ `income_class`: Categorical variable with income label (Low to High)
++ `co2_per_capita`: carbon dioxide emissions per capita in metric tons (T)
+
+<br>
+
+#### Let's explore who had the tax in place at what point
+<p>
+We can use what we have learnt about the base R *table()* function, to check how many countries had a `tax` in place every year.
+
+```{r}
+table(carbon_tax_df$tax, carbon_tax_df$year) %>% 
+  knitr::kable() %>% # create kable table
+  kableExtra::kable_styling() # view kable table
+```
+
+<br>
+<br>
+
+#### Let's explore visually the levels of carbon dioxide emmissions
+<p>
+
+```{r fig.align="center"}
+ggplot(carbon_tax_df, aes(x = factor(year),
+                          y= co2_per_capita, 
+                          color = factor(tax))) +
+  geom_point() + #create scatterplot
+  theme(legend.position="bottom") + #move legend to the bottom
+  labs(title = "Exploratory plot of CO2 emissions per capita",
+       x = "Year",
+       y = "CO2 emissions in metric tons (T)",
+       color = "Carbon tax") +
+  theme_minimal() +
+  scale_color_discrete(labels = c("No", "In place")) #change labels of the legend
+
+```
+
+<p>
+
+```{r fig.align="center"}
+carbon_tax_df %>%
+  dplyr::mutate(year_as_date = lubridate::ymd(year, truncated = 2L), #turning numeric to date format
+                income_class = factor(carbon_tax_df$income_class, 
+                                      levels = c("High", "High-Middle",
+                                                 "Low-Middle", "Low"))) %>% #reordering the factors
+  ggplot(., aes(x = year_as_date, 
+                y= co2_per_capita, 
+                color = factor(tax))) +
+  geom_point() + #create scatterplot
+  geom_path(aes(group = 1)) + #to render consecutive lines disregarding the tax (you will likely use geom_line() for the assignment)
+  facet_wrap(country_name~income_class) + #to split plot into panels based on this dimension
+  scale_x_date(date_labels = "%Y") + #telling ggplot that we want the ticks to be the years in the dates
+  labs(title = "Exploratory plot of CO2 emissions per capita",
+       x = "Year",
+       y = "CO2 emissions in metric tons (T)",
+       color = "Carbon tax") +
+  theme_bw() +
+  theme(legend.position="bottom") + #move legend to the bottom
+  scale_color_discrete(labels = c("No", "In place")) #change labels of the legend
+
+```
+
+<p>
+<center>**WHAT DO WE SEE HERE?**</center>
+<p>
+<p>
+*Note: The exploratory data analysis portions of our scripts will not transfer directly to this week's assignment; however, they will be very useful for the extension portion of your final replication paper. Summarizing, graphing, and exploring your data will be critical to discover patterns, to spot anomalies, and to check assumptions*
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+
+## 1.2 Modeling and estimating
+
+We have seen during the lecture that balanced panel data can help us decompose the error term. With a balanced panel we can capture all unobserved, unit- and time-specific factors. 
+<p>
+In the example at hand, we can think of unit-specific factors as characteristics of individual countries that are constant over time (e.g. a country that just loves big pick-up trucks). We can also think about time-specific factors that affect all countries (e.g. global economic shocks).
+<p>
+We can formulate this as:<p>
+$$Y_{it} = β_0 + β_1D_{it} + \theta_{i} + \delta_t + \upsilon_{it}$$
+where $\theta_i$ reflects the time-invariant traits of the units, $\delta_t$ reflects the time-specific factors that affect everyone  and $\upsilon_{it}$ is the **idiosyncratic error**
+<br>
+We will move forward by creating three models:<p>
++ A **naive model** (also known as the *pooled model*), where we will regress `co2_per_capita` on `tax`.
++ A **model with unit-fixed effects**, where we will capture the $\theta$ portion of our error
++ A **model with time- and unit-fixed effects**, where we will capture our $\nu$ and $\theta$ portions of our error term
+
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+### 1.2.1 Naive modeling
+
+```{r, message=FALSE, warning=FALSE}
+naive_carbon <- lm(co2_per_capita ~ tax, data = carbon_tax_df)
+pooled_naive_carbon <- plm(co2_per_capita ~ tax, data = carbon_tax_df, model = "pooling")
+```
+
+<br>
+
+#### Naive model with lm()
+
+<div align="center">
+```{r results="asis"}
+stargazer(naive_carbon, type = "text")
+```
+</div>
+<p>
+
+#### Naive model with plm()
+
+<div align="center">
+```{r results="asis"}
+stargazer(pooled_naive_carbon, type = "text")
+```
+</div>
+<p>
+<p>
+This model is telling us that on average, the $CO_2$ emmissions per capita are reduced by 6.2 metric tons when a carbon tax is put in place. Still, after all the work we have done throughout the semester, we understand that there may be a plethora of factors that could be skewing the results of this bivariate regression.
+
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+### 1.2.3 Unit-fixed effects
+
+We will learn two ways of gathering unit- and time-fixed effects in R. First, we will perform **Least Squares Dummy Variables (LSDV) estimation** with *lm()*, where we essentially get an individual estimate for each unit. Second, we will run our model with *plm()*, which will do the same mechanics, yet it will not estimate each of the units intercepts (because it relies on the "de-meaning" approach).
+
+
+```{r}
+lsdv_unit_fe <- lm(co2_per_capita ~ tax + country_name, data = carbon_tax_df)
+unit_fe <- plm(co2_per_capita ~ tax, 
+               data = carbon_tax_df, 
+               index = c("country_name","year"),
+               effect = "individual",
+               model = "within")
+```
+<br>
+
+#### Unit-fixed effects with lm() --- Least Squares Dummy Variables (LSDV) estimation
+
+<div align="center">
+```{r results="asis"}
+stargazer(lsdv_unit_fe, type = "text")
+```
+</div><br>
+
+#### Unit-fixed effects with plm()
+
+<div align="center">
+```{r results="asis"}
+stargazer(unit_fe, type = "text")
+```
+</div>
+<br>
+**WHAT DO THESE RESULTS TELL US?** <p>
+
+Adding unit-level fixed effects to the model, i.e. accounting for unobserved, time-invariant characteristics of countries and only focusing on within-state variation, an increase in the imposition of a carbon tax reduces $CO_2$ per capita emissions by **4.44 metric tons**. Once we have captured the variation between countries, we can see that our results from the naive model were substantially biased. We can still try to capture the time-specific portion of the error.
+<br>
+
+*The results from the Least Squares Dummy Variables (LSDV) estimation are read in reference to a baseline. In this case, the constant is representing the intercept for Adjikistan. We can utilize the individual slopes for each country to say that Freedonians emit on average 5.93 more metric tons of $CO_2$ per capita than Adjikistanians.*
+
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+### 1.2.4 Unit- and time-fixed effects
+
+We will perform our regressions with **Least Squares Dummy Variables (LSDV) estimation** with *lm()* and our simplified way with *plm()*.
+
+
+```{r}
+lsdv_unit_time_fe <- lm(co2_per_capita ~ tax + country_name + factor(year), 
+                        data = carbon_tax_df)
+unit_time_fe <- plm(co2_per_capita ~ tax, 
+                    data = carbon_tax_df, 
+                    index = c("country_name", "year"),  
+                    model = "within", 
+                    effect = "twoways")
+```
+<br>
+
+#### Unit- and time-fixed effects with lm() --- Least Squares Dummy Variables (LSDV) estimation
+
+<div align="center">
+```{r results="asis"}
+stargazer(lsdv_unit_time_fe, type = "text")
+```
+</div><br>
+
+#### Unit-fixed effects with plm()
+
+<div align="center">
+```{r results="asis"}
+stargazer(unit_time_fe, type = "text")
+```
+</div>
+
+<br>
+**WHAT DO THESE RESULTS TELL US?** <p>
+Now in addition to adding unit-level fixed effects to the model, we control for time-specific factors that affect the global per capita $CO_2$ emissions. The results suggest that the effect of a carbon-tax leads to a decrease $CO_2$ emissions of 3.91 metric tons per capita.
+
+<br>
+
+#### Test of serial correlation for the idiosyncratic component of the errors in panel models
+
+Assumption for errors is $υ_{it} ∼ iid(0, σ_υ^{2})$.
+
+With longer panels, serial correlation between errors is a problem:
+$Cor(υ_{it}, υ_i(t−1))≠0$.
+
+We can test for serial correlation in our time and unit FE specification model, as such: 
+
+```{r}
+
+pbgtest(unit_time_fe, order = 2)
+
+```
+
+<p>
+In this case, we do not find any serial correlation, so we do not need to correct our standard errors manually. If we were to find serial correlation, we could introduce robust standard errors with a similar syntax to the one used last week for clustered standard errors:
+
+```r
+model_with_robust_se =  coeftest(unit_time_fe, vcov=vcovHC(unit_time_fe, type = "sss"))
+```
+
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+## 1.3 Drafting some brief recommedations
+
+You report back to the Organization of Economic Non-Cooperation for Development (OENCD). Based on your analysis of the data at hand, you suggest that the implementation of a carbon tax does have an effect on national carbon dioxide emissions per capita. Your results show that a carbon tax reduces $CO_2$ emissions by 3.91 metric tons per capita. <p>
+
+Your results are welcomed internationally and all states move forward with the measure.
+<br>
+
+<center>
+<img src="https://thumbs.gfycat.com/GreedyMiserableArrowcrab-size_restricted.gif" alt="environment_peace" width="450"/></center>
+
+

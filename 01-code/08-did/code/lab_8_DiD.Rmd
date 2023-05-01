@@ -1,0 +1,341 @@
+---
+title: "Difference-in-Differences"
+output:
+  html_document:
+    theme: journal
+    toc: yes
+    toc_float:
+      collapsed: false
+---
+
+## Measuring the effect of a soda tax on sugar-added drink consumption
+
+After the very succesful impact evaluations you have performed in the past weeks, you are contacted by the local government of Pawnee, Indiana. The city is interested in your advice to assess a policy intervention passed with the support of councilwoman Leslie Knope. 
+
+The city of Pawnee has been at the spotlight recently, as it has come to be known as the child obesity and diabetes capital of the state of Indiana. Some of the constituents of the city point at the fast food culture and soda sizes across the restaurants in town as a source of the problem. The largest food chain in Pawnee, Paunch Burger, offers its smallest soda size at a whopping 64oz (about 1.9 liters). 
+
+The "soda tax", as it came to be known, came to effect initially at a couple of districts. Fortunately for you, based on an archaic law, residents of Indiana have to demonstrate their residence in the district they intend to dine before being served at any of the restaurants. The latter fact means that Pawnee inhabitants can only buy sugar-added drinks in their respective home district. 
+
+<center>
+<img src="https://media.giphy.com/media/CAXFvut1tBBf2/giphy.gif" alt="soda_size" width="450"/></center>
+
+<br>
+<br>
+<br>
+
+---
+
+## 1.1 Exploring the data
+
+```{r warning=FALSE, message=FALSE}
+
+set.seed(42) #for consistent results
+
+library(dplyr) # to wrangle our data
+library(tidyr) # to wrangle our data - pivot_longer()
+library(ggplot2) # to render our graphs
+library(readr) # for loading the .csv data
+library(lmtest) # to gather our clustered standard errors - coeftest()
+library(plm)  # to gather our clustered standard errors - vcovHC()
+library(kableExtra) # to render better formatted tables
+library(stargazer) # for formatting your model output
+
+soda_tax_df <- readr::read_csv("https://raw.githubusercontent.com/seramirezruiz/hertiestats2/master/data/soda_tax_df.csv") # simulated data
+
+names(soda_tax_df) # to check the names of the variables in our data
+```
+
+<br>
+Our dataset *soda_tax_df*, contains the following information:
+
++ `ìd`: A unique number identifier for each of the 7,500 inhabitants of Pawnee
++ `district`: The name of the district in which the corresponding unit lives
++ `treatment`: A binary variable that signals whether the subject lived in a district where the tax was implemented
++ `pre_tax`: The weekly sugar-added drink consumption in ounces before the tax was imposed
++ `post_tax`: The weekly sugar-added drink consuption in ounces after the tax was imposed
+
+<br>
+
+---
+
+<br>
+
+#### Let's check how many units are there in every district and which districts have treated units
+
+We can use the base R *table()* function, which performs categorical tabulation of data with the variable and its frequency, to check how many people live on each district. 
+
+```{r}
+table(soda_tax_df$district) %>%
+  knitr::kable(col.names = c("District", "Inhabitants")) %>% # create kable table
+  kableExtra::kable_styling() # view kable table
+```
+
+<p>
+Even more, we can create a two-way cross-table to check how many treated units live in each district.
+<p>
+
+```{r}
+table(soda_tax_df$treatment, soda_tax_df$district) %>% 
+  knitr::kable() %>% # create kable table
+  kableExtra::kable_styling() # view kable table
+```
+
+<br>
+
+---
+
+<br>
+
+#### Let's check the distribution of sugar-added drinks consumption at different points in time
+<p>
+We can also utilize *summary()* to check the distribution of our variables. In this case, we can look at the distribution of our variable of interest at the two points in time:
+<p>
+<center>**Pre-tax consumption levels**</center>
+
+```{r}
+summary(soda_tax_df$pre_tax)
+
+ggplot(soda_tax_df, aes(x = pre_tax)) +
+  geom_vline(xintercept = 509.7, linetype = "dashed") +
+  geom_density(fill = "#f1a340", alpha = 0.3) +
+  theme_minimal() +
+  labs(x = "Pre-tax soda consumtion (oz)",
+       y = "Density")+
+  ggtitle("Soda consumption before the tax, in all districts")
+```
+<p>
+<center>**Post-tax consumption levels**</center>
+
+```{r}
+summary(soda_tax_df$post_tax)
+ggplot(soda_tax_df, aes(x = post_tax)) +
+  geom_density(fill = "#998ec3", alpha = 0.3) +
+  geom_vline(xintercept = 449.8, linetype = "dashed") +
+  theme_minimal() +
+  labs(x = "Post-tax soda consumtion (oz)",
+       y = "Density") +
+  ggtitle("Soda consumption after the tax, in all districts")
+```
+
+<br>
+<br>
+<br>
+<br>
+
+---
+
+<br>
+
+## 1.2 Modeling and estimating
+
+So far we have ignored time in our estimations. Up until this point, most of the tools we have learned produce estimates of the counterfactual through explicit assignment rules that work randomly or as-if-randomly (e.g. randomized experimental, regression discountinuity, and instrumental variable set-ups). 
+
+Difference-in-differences compares the changes in outcomes over time between units under different treatment states. This allows us to correct for any differences between the treatment and comparison groups that are constant over time assuming that the trends in time are parallel.
+
+<br>
+<br>
+
+### a. Calculating without time
+
+If we did not have the `pre_tax` baseline measure, we would likely utilize the `post_tax` to explore the average effect on the treated. In this case, we would model this as:
+<p>
+
+```{r}
+after_model <- lm(post_tax ~ treatment, data = soda_tax_df)
+```
+
+<div align="center">
+```{r results="asis"}
+stargazer(after_model, type = "text")
+```
+</div>
+<p>
+<p>
+We could read this result substantively as: those who lived in districts were the tax was implemented consumed on average 146.9 ounces less of sugar-added drinks per week compared to those who lived in districts were the tax was not put in place. **This calculation would give us a comparison of the treatment and control groups after treatment.** 
+
+To believe the results of our `after_model`, we would need to believe that the mean ignorability of treatment assignment assumption is fulfilled. We would have to think carefully about possible factors that could differentiate our treatment and control groups. We use a treatment indicator based on the districts where the measure was able to be implemented. Treatment was not fully randomly assigned, so there may be lots of potential confounders that create baseline differences in the scores for those living in Old Eagleton compared to those in Snake Lounge, which also affect the after-treatment comparisons.
+
+If we think about the mechanics behind this naive calculation, we are just comparing the average observed outcomes for those treated and not treated after the tax was imposed:
+
+```{r, fig.align="center", message= FALSE}
+soda_tax_df %>% 
+  dplyr::group_by(treatment) %>% 
+  dplyr::summarize(mean = mean(post_tax)) %>% 
+  knitr::kable(col.names = c("Treatment", "Average after tax")) %>%
+  kableExtra::kable_styling()
+```
+
+```{r, fig.align="center", echo = FALSE}  
+ggplot(soda_tax_df, aes(x = post_tax, fill = factor(treatment))) +
+  geom_density(alpha = 0.3) +
+  geom_vline(xintercept = 523.27, linetype = "longdash", color = "#F8766D") + #avg for the untreated
+  geom_vline(xintercept = 376.35, linetype = "longdash", color = "#00BFC4") + #avf for the treated
+  theme_minimal() +
+  labs(x = "Soda consumtion at post tax period in Oz",
+       y = "Density",
+       fill = "Treatment")
+```
+
+<br>
+<br>
+
+
+### b. Including the time dimension (First differences on treatment indicator)
+
+We can introduce the time component to our calculation by incorporating the pre-treatment levels of sugar-added drink consumption, which gives us the diff-in-diff estimand. We could calculate this in a fairly straightforward manner by creating a variable assessing the change:
+
++ `change`: The difference in sugar-added drink consuption between post- and pre-tax
+
+```{r, message=FALSE}
+soda_tax_df <- soda_tax_df %>%
+  dplyr::mutate(change = post_tax - pre_tax) #
+
+did_model <- lm(change ~ treatment, data = soda_tax_df)
+```
+
+<div align="center">
+```{r results="asis"}
+stargazer(did_model, after_model, type = "text")
+```
+</div>
+<p>
+<p>
+We could read this result substantively as: those who lived in districts were the tax was implemented consumed on average 149.7 ounces less of sugar-added drinks per week compared to those who lived in districts were the tax was not put in place. **This calculation would give us the change, or difference, in sugar-added drink consumption for treatment and control groups.** 
+<p>
+
+To believe the results of our `did_model`, we would need to believe that there are parallel trends between the two groups.
+
+<br>
+*Note: when simulating the data the `post_tax` was defined as:* $post_tax = 15 + pre\_tax  - 150(treatment) + error$
+
+<br>
+<br>
+
+### c. Including the time dimension (Regression formulation of the DiD model)
+
+Remember the formula from the lecture where we estimate the diff-in-diff effect with time and treatment dummies? We can re-format our data to gather our diff-in-diff estimand<p>
+
+$$Y_{it} = β_0 + β_1D^*_i + β_2P_t + β_{DD}D^∗_i × P_t + q_{it} $$
+<p>
+<p>
+<center>where $D^*_i$ tell us if subject $i$ is in the treatment group and $P_t$
+indicates the point in time (1 for post)</center>
+<p>
+We need to convert our data to a long format to render the time and treatment dummy variables. This is how our data look like:<p>
+
+```{r}
+head(soda_tax_df, 6)
+```
+<p>
+We will utilize the *pivot_longer()* function from `tidyr` to format our data frame.
+<p>
+
+```{r}
+soda_tax_df_long <- soda_tax_df %>%
+  dplyr::select(-change) %>% # select the columns we are interested in
+  tidyr::pivot_longer(cols = c(pre_tax, post_tax), names_to = "period", values_to = "soda_drank") %>% # grab columns, put names to new variable period and values to new variable soda_drank
+  dplyr::mutate(after_tax = ifelse(period == "post_tax", 1, 0)) # create dummy for period
+
+  head(soda_tax_df_long, 6)
+```
+<p> 
+We can see that under our long format, we have two entries for every individual. We have our variable `after_tax`, which represents $P_t$, where 0 and 1 are pre- and post-tax periods respectively. We can now render our regression based on the formula: 
+
+$$Y_{it} = β_0 + β_1D^*_i + β_2P_t + β_{DD}D^∗_i × P_t + q_{it}$$
+<p>
+```{r}
+did_long <- lm(soda_drank ~ treatment + after_tax + treatment * after_tax, data = soda_tax_df_long) #running our model
+
+did_long_clustered_se <- coeftest(did_long, vcov=vcovHC(did_long,type="HC0",cluster="district")) #clustering out standard errors at the district level
+
+```
+<p>
+<div align="center">
+```{r results="asis"}
+stargazer(did_long_clustered_se, type = "text")
+```
+</div>
+<br>
+<p>
+(We can think about the results of this regression in terms of the lab's slide 10: we are mostly interested in the coefficient for the interaction term in our regression equation).
+
+<br>
+
+```{r, fig.align="center", echo=FALSE}
+soda_tax_df_long %>% 
+  dplyr::mutate(period = case_when(period == "post_tax" ~ "T1 - Post-tax",
+                                   period == "pre_tax" ~ "T0 - Pre-tax"),
+                treatment = case_when(treatment == 1 ~ "Treated (D=1)",
+                                   treatment == 0 ~ "Untreated (D=0)")) %>%
+  dplyr::group_by(period, treatment) %>%
+  dplyr::mutate(group_mean = mean(soda_drank)) %>% 
+ggplot(., aes(x = soda_drank, fill = factor(treatment))) +
+  geom_density(alpha = 0.4) +
+  geom_vline(aes(xintercept = group_mean), linetype = "longdash") +
+  scale_fill_manual(values = c("#998ec3", "#f1a340")) +
+  facet_grid(treatment~period) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  labs(x = "Soda drank (Oz)",
+       y = "Density")
+
+
+```
+
+<br>
+
+```{r, fig.align="center", message = FALSE}
+soda_tax_df_long %>% 
+  dplyr::group_by(period, treatment) %>% #group by period and treatment
+  dplyr::summarize(soda_consumed = mean(soda_drank)) %>% #render averages
+  tidyr::pivot_wider(names_from = period, values_from = soda_consumed) %>%
+  dplyr::select(treatment, pre_tax, post_tax) %>%
+  dplyr::arrange(desc(treatment)) %>%
+  knitr::kable(col.names = c("Treatment", "Pre-tax", "Post-tax"),
+               digits = 2) %>%
+  kableExtra::kable_styling(full_width = F) %>%
+  kableExtra::add_header_above(c("", "Period" = 2)) #add header for period
+
+```
+
+```{r}
+
+soda_tax_df_wide %>% 
+  select(-id, -district) %>% 
+  group_by(treatment) %>%
+  summarize_all(funs(mean)) %>% 
+  pivot_longer(cols = c(pre_tax, post_tax), 
+               names_to = "period", 
+               values_to = "soda_drank") %>% 
+  mutate(time = ifelse(period == "post_tax", 2, 1)) %>% 
+  group_by(treatment) %>% 
+  ggplot(aes(x = factor(time), y = soda_drank, color = factor(treatment))) +
+  geom_point() +
+  geom_line(aes(x = time, y = soda_drank)) +
+  labs(x = "Time periods", y = "Ounces of soda drank per week", color = "Treatment group")+
+  theme_minimal() 
+  
+
+```
+<br>
+
+<center>
+<img src="https://nickchk.com/anim/Animation%20of%20DID.gif" alt="dif-in-dif" width="450"/></center>
+
+<br>
+
+---
+
+## 1.3 Drafting some brief recommedations
+
+Based on your analysis of the data at hand, you decide to recommend that the tax measure should move forward in the rest of Pawnee. You state that it is a very good example of a pigouvian tax, which captures the negative externalities not included in the market price of sugar-added drinks. The findings suggest that the tax reduced the weekly sugar-added drink consumption by about 150 luquid ounces (almost 4.5 liters).
+<p>
+<p>
+Your evaluation report is so convincing that the Director of the Parks Department, Ron Swanson, is even doubting libertarianism.
+<p>
+<p>
+<center>
+<img src="https://i.imgur.com/vV7enqX.gif" width="450"/></center>
+<br>
+<br>
+<br>
