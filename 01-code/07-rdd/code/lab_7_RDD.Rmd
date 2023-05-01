@@ -1,0 +1,487 @@
+---
+title: "Regression Discontinuity Design (RDD)"
+output: 
+  html_document:
+    toc: TRUE
+    number_sections: FALSE
+    highlight: tango
+    theme: cosmo
+    toc_depth: 3
+    toc_float: true
+---
+
+#### Resources
+1. R packages for RDD: https://eric.ed.gov/?id=EJ1141190
+2. Short overview of RDD with examples: https://www.youtube.com/watch?v=tWRsYWSP3fM
+3. A good introduction to local regression methods is also available in Chapters
+   1 and 2 of Keele, Luke. 2008. "Semiparametric regression for the social
+   sciences". Chichester, UK: John Wiley and Sons.
+4. local regression introduction: https://www.youtube.com/watch?v=Vf7oJ6z2LCc
+5. A more technical introduction: https://www.youtube.com/watch?v=ncF7ArjJFqM&t=3s
+6. Imbens & Kalyanaraman (2012) Optimal bandwidth choice: https://academic.oup.com/restud/article/79/3/933/1533189
+
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+## Example 1. Measuring the effect of the minimum legal drinking age (MLDA) on mortality
+<p>
+> In an effort to address the social and public health problems associated with underage drinking, a group of American college presidents have lobbied states to return the minimum legal drinking age (MLDA) to the Vietnam era threshold of 18. The theory behind this effort (known as the Amethyst Initiative) is that legal drinking at age 18 discourages binge drinking and promotes a culture of mature alcohol consumption. This contrasts with the traditional view that the age-21 MLDA, while a blunt and imperfect tool, reduces youth access to alcohol, thereby preventing some harm. 
+**Angrist and Pischke (2014)**
+
+You have been hired as an outside consultant by Mothers Against Drunk Driving (MADD) to study whether the over-21 drinking minimum in the US helps reduce alcohol consumption by young adults and its harms, or is it just not working.
+*This example is based on data from Carpenter and Dobkin (2011).*
+<p>
+
+```{r warning=FALSE, message=FALSE}
+library(dplyr) # for data wrangling
+library(ggplot2) # for creating plots
+library(rdrobust) # for rdrobust()
+library(readr) # for loading the .csv data
+
+set.seed(42) # for consistent results
+
+mlda_df <- readr::read_csv("https://raw.githubusercontent.com/seramirezruiz/stats-ii-lab/master/Session%206/data/mlda.csv") # loading data from Mastering Metrics
+```
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+### Checking visually whether a sharp-RDD makes sense for the analysis
+
+What we are looking for is whether our threshold is in fact the cut-off for treatment. In this case, the law is pretty clear: young adults in the US can legally drink at age 21.
+
+```{r fig.align="center"}
+ggplot(mlda_df, aes(x = agecell, # actual age
+                 y = treatment, # are they over 21 or not
+                 color = factor(treatment))) +
+  geom_point() + 
+  labs(x = "Age", 
+       y = "Treatment Probability") +
+  scale_color_discrete(name = " ", 
+                       labels = c("Under legal drinking age", "Over legal drinking age")) +
+  geom_vline(xintercept = 21, linetype = "dotted") +
+  theme_minimal()
+```
+
+<p>
+We can see from the graph that at the 21-years-of-age threshold, young adults can legally consume and buy alcohol in the US, which would make age a viable forcing variable for a sharp-RDD set-up.
+
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+### Running our regression models
+
+As was pointed out in the lecture, we must decide on a model that we believe reflects the relationship of our $E(Y_i|\tilde{X}_i)$:
+
+- linear, common slope <p>
+- linear, different slopes <p>
+- non-linear <p>
+
+Remember that each model corresponds to a particular set of assumptions
+<p>
+We will show you how to visualize this with `ggplot`.
+<br>
+
+<center>**LET'S LOOK AT A SCATTERPLOT TO GET AN IDEA OF WHAT WE ARE DEALING WITH**</center>
+<p>
+```{r fig.align="center"}
+ggplot(mlda_df, 
+       aes(x = agecell, # age 
+           y = outcome)) + # mortality rate per 100k accidents
+  geom_point() +
+  geom_vline(xintercept = 21, linetype = "dotted") +
+  labs(title = "Exploratory plot",
+       x = "Forcing variable (Age)",
+       y = "Mortality rate from motor vehicle \naccidents (per 100,000)") +
+  theme_minimal()
+```
+<br>
+<br>
+**NOTE that the forcing variable in this dataset has already been reduced to a window of two years above or below the cutoff.**
+---
+
+<br>
+<br>
+
+#### Linear model with common slopes
+
+Let's run a linear model with common slopes and plot our results. 
+
+**NOTE that the forcing variable in this case (age) is CENTERED at 0 (age 21) and is the distance from age 21 in years, while treatment is just binary over/under 21.**
+
+<p>
+
+```{r}
+# running linear model with common slope
+linear_common_slope <- lm(outcome ~ treatment + forcing, data = mlda_df)
+summary(linear_common_slope)
+```
+
+<center>**WHAT DO THESE RESULTS TELL US?** </center><p>
+
+In line with our assumptions for linear models with common slope, we consider that treatment effect $D_i$ does not depend on the forcing $X_i$. We can formalize this model as:
+$$E(Y_i|X_i,D_i) = \tilde{\alpha} + \tau D_i + \beta\tilde{X}_i$$
+Hence we can say, that given our $\tau$ we can expect 4.53 more deaths from motor vehicle accidents per 100,000 for those who can legally drink. We also see that for every year of age increase, the number of expected deaths per 100,000 decreases by 3.15. (Our $\beta = -3.1488$).
+<p><p>
+We can graph our results with `ggplot` by extracting the predicted values of the model to recreate the linear fit: <p>
+
+```{r fig.align = 'center'}
+mlda_df$yhat_linear <- predict(linear_common_slope) # we create a new variable containing the predicted mortality rate
+
+linear_plot <- mlda_df %>% 
+  ggplot(aes(x = agecell,  
+             y = yhat_linear, 
+             col = factor(treatment))) +
+  geom_point(aes(x = agecell, 
+                 y = outcome, 
+                 col = factor(treatment))) +
+  geom_vline(xintercept = 21, linetype = "dotted") +
+  labs(title = "Linear model with common slope",
+       x = "Forcing variable (Age)",
+       y = "Mortality rate from motor vehicle \naccidents (per 100,000)") +
+  geom_line(data = mlda_df[mlda_df$agecell >= 21,], 
+            color = "#00BFC4", 
+            size = 1) +
+  geom_line(data = mlda_df[mlda_df$agecell < 21,], 
+            color = "#F8766D", 
+            size = 1) +
+  scale_color_manual(name = "",
+                     values = c("#F8766D", "#00BFC4"),
+                     labels = c("Control", "Treatment")) +
+  theme_minimal()
+
+linear_plot
+
+```
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+#### Linear model with different slopes
+
+Let's run the linear model to gather the slopes for both groups and plot our results. This is achieved by interacting our treatment and forcing variables.<p>
+
+```{r}
+linear_different_slope <- lm(outcome ~ treatment*forcing, data = mlda_df)
+summary(linear_different_slope)
+```
+<center>**WHAT DO THESE RESULTS TELL US?** </center><p>
+In line with our assumptions for linear models with different slope, we allow our treatment effect $D_i$ to vary along the forcing $X_i$. We can formalize this model as:
+$$E(Y_i|X_i,D_i) = \tilde{\alpha} + \beta_oX_i+ \tau D_i + \tilde{\beta}D_i\tilde{X}_i$$
+Hence we can say, that at given our $\tau$, we can expect 4.53 more deaths from motor vehicle accidents per 100,000 for those who can legally drink at the threshold. Now we have two different slopes for year-of-age changes. For under-21 individuals, an increase of one year of age would on average result in 2.57 less deaths from motor vehicle accidents (our $\beta_0 = -2.5676$). For those of legal drinking age, we would expect 3.73 less deaths per 100,000 for every one year of age increase (our $\beta_0X_i + \tilde{\beta}D_i\tilde{X}_i = -2.5676 + (-1.1624) = - 3.73$).
+<p><p>
+We can graph our results with `ggplot` by just adding a smooth geom. Since we have added treatment to our color aestethic, `ggplot` will automatically create the regression line for each group<p>
+```{r fig.align = 'center', warning= F, message= F}
+
+diff_slopes_plot <- mlda_df %>% 
+  ggplot(aes(x = agecell,  
+             y = outcome, 
+             col = factor(treatment))) +
+  geom_point() +
+  geom_vline(xintercept = 21, linetype = "dotted") +
+  geom_smooth(method = "lm", se = F) +
+  labs(title = "Linear model with different slopes",
+       x = "Forcing variable (Age)",
+       y = "Mortality rate from motor vehicle \naccidents (per 100,000)") +
+  scale_color_manual(name = "",
+                     values = c("#F8766D", "#00BFC4"),
+                     labels = c("Control", "Treatment")) +
+  theme_minimal()
+
+diff_slopes_plot
+```
+
+<br>
+
+**Where can you see our alhpa, beta-zero, and tau in the previous plot?**
+
+<br>
+
+---
+
+<br>
+<br>
+
+#### Non-linear model 
+
+Let's run a quadratic model and plot our results. 
+
+<center>**THIS IS HOW WE WOULD FORMALIZE A QUADRATIC MODEL**</center>
+$$E(Y_i∣X_i, D_i) = \gamma_0 + \gamma_1\tilde{X_i} + \gamma_2\tilde{X^2_i} + \tau_3D_i + \alpha_1\tilde{X_i}D_i + \alpha_2\tilde{X^2_i}D_i$$
+<p>
+We can input this in our regression model as follows:
+<p>
+
+```{r}
+quadratic <- lm(outcome ~ forcing + 
+                  I(forcing^2) + # I tells R to interpret "as is"
+                  treatment + 
+                  I(forcing * treatment) + 
+                  I((forcing^2) * treatment),
+                data = mlda_df)
+summary(quadratic)
+```
+<center>**WHAT DO THESE RESULTS TELL US?** </center><p>
+In line with our assumptions for non-linear models, we allow our treatment effect $D_i$ to vary along the forcing $X_i$. In this case with quadratic interactions. We can formalize this model as:
+
+$$E(Y_i∣X_i, D_i) = \gamma_0 + \gamma_1\tilde{X_i} + \gamma_2\tilde{X^2_i} + \tau_3D_i + \alpha_1\tilde{X_i}D_i + \alpha_2\tilde{X^2_i}D_i$$
+Hence we can say, that at given our $\tau$, we can expect 4.66 more deaths from motor vehicle accidents per 100,000 for those who can legally drink at the threshold. We could also calculate the expected value of $Y$ at different levels of $X$.
+
+Say we want to know what the expected value is for 23-year-olds. Since our forcing variable is 0 at 21 years of age, we can think of 23 as 2. Additionally, 23-year-olds are above the legal drinking age minimum, therefore for them the value of $D$ is 1.
+$$E(Y | X=2, D =1) = 29.8090 - 2.9330(2) -0.1852(2)^2 + 4.6629(1) - 0.8231 (2*1) + 0.1985(2*1)^2 = 27.01$$
+Based on this, we would expect a mortality rate from motor vehicle accidents of 27.01 per 100,000 for 23-year-olds.
+<p><p>
+We can graph our results with `ggplot` by extracting the predicted values of our quadratic model to recreate the fit: <p>
+```{r fig.align = 'center'}
+mlda_df$yhat_quadratic <- predict(quadratic) 
+
+quadratic_plot <- mlda_df %>% 
+  ggplot(aes(x = agecell, 
+             y = yhat_quadratic, 
+             col = factor(treatment))) +
+  geom_point(aes(x = agecell, 
+                 y = outcome, 
+                 col = factor(treatment))) +
+  geom_vline(xintercept = 21, linetype = "dotted") +
+  labs(title = "Quadratic plot",
+       x = "Forcing variable (Age)",
+       y = "Mortality rate from motor vehicle \naccidents (per 100,000)") +
+  geom_line(data = mlda_df[mlda_df$agecell >= 21,], 
+            color = "#00BFC4", 
+            size = 1) +
+  geom_line(data = mlda_df[mlda_df$agecell < 21,], 
+            color = "#F8766D", 
+            size = 1) +
+  scale_color_manual(name = "",
+                     values = c("#F8766D", "#00BFC4"),
+                     labels = c("Control", "Treatment")) +
+  theme_minimal()
+
+quadratic_plot
+```
+
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+### Calculating the LATE with rdrobust()
+
+`rdrobust()` is part of the `rdrobust` package. It performs local linear regressions to either side of the cutpoint using optimal bandwidth calculation. The syntax is the following:
+
+```r
+model <- rdrobust::rdrobust(x, 
+                            y,
+                            c = cutoffvalue,
+                            kernel = "tri", #default
+                            bwselect = "mserd") #default
+                            
+```
+
+We have the option to set the cutpoint, kernel type, order of the local polynomial, etc.: https://cran.r-project.org/web/packages/rdrobust/rdrobust.pdf
+
+<p>
+
+```{r}
+llr <- rdrobust::rdrobust(mlda_df$outcome, 
+                          mlda_df$forcing,  
+                          c = 0,
+                          kernel = "tri",
+                          bwselect = "mserd")
+summary(llr)
+```
+<center>**WHAT DO THESE RESULTS TELL US?** </center>
+The model is telling us that based on the calculation, the estimated effect would be 4.90 more deaths per 100,000 for those over-21. 
+<p><p>
+The most straight-forward way to graph the output of this model is through the `rdrobust::rdplot()` function: <p>
+
+```{r fig.align="center"}
+rdrobust::rdplot(mlda_df$outcome, 
+                 mlda_df$forcing,  
+                 c = 0,
+                 kernel = "tri",
+                 title = "Motor Vehicle Accidents Death",
+                 x.label = "Age from 21",
+                 y.label =  "Mortality rate from motor vehicle \naccidents (per 100,000)"
+)
+
+```
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+
+## Example 2. Measuring the long term effects of a conditional cash transfer program on educational achievement
+
+Imagine that you work as a technical adviser for the Ministry of Education in your country. You are tasked to assess whether a Conditional Cash Transfer (CCT) program established decades before yields positive results on the beneficiaries' educational attainment. There is a large amount of evidence which suggests that CCTs encourage households to increase the use of educational services.
+
+You read the guidelines for the program. Families receive a stipend per child provided they keep their them in school and take them for health checks. Additionally, you note that under the rules of the program, beneficiaries are selected based on a household income threshold of €20000. You decide to dive into the data with the idea that a discontinuity is created based on the income threshold. (This example utilizes simulated data)
+
+<br>
+```{r warning=FALSE, message=FALSE}
+cct_data <- readr::read_csv("https://raw.githubusercontent.com/seramirezruiz/stats-ii-lab/master/Session%206/data/cct_data.csv") # loading simulated data frame of the program
+```
+
+<br>
+`hh_income`: household income in euros 
+
+`years_of_schooling`: years of schooling for respondent
+
+`treatment`: binary variable indicating whether respondent was a beneficiary of the program
+<br>
+
+---
+
+### Checking visually whether a sharp-RDD makes sense for the analysis
+
+What we are looking for in this case is whether our €20000 threshold is in fact the cut-off for treatment. That is to say, that only those who had a household income of equal or less than €20000 received the cash transfer.
+
+```{r fig.align = 'center'}
+ggplot(cct_data, 
+       aes(x = hh_income, 
+           y = years_of_schooling, 
+           color = factor(treatment))) + 
+  geom_point() + 
+  labs(x = "Household Income", 
+       y = "Years of Schooling") +
+  scale_color_discrete(name = " ", 
+                       labels = c("No treatment", "Treatment")) +
+  geom_vline(xintercept = 20000, linetype = "dotted") +
+  theme_minimal()
+
+ggplot(cct_data, 
+       aes(x = hh_income, 
+           y = treatment, 
+           color = factor(treatment))) + 
+  geom_point() + 
+  labs(x = "Household Income", 
+       y = "Treatment") +
+  scale_color_discrete(name = " ", 
+                       labels = c("No treatment", "Treatment")) +
+  geom_vline(xintercept = 20000, linetype = "dotted") +
+  theme_minimal()
+```
+
+<br>
+We can see from the graph that our €20000 threshold is in fact cutting off the distribution of the treatment. This would make household income a viable forcing variable for a sharp-RDD set-up.
+<br>
+
+---
+
+### Estimating our model
+
+We can see that the relationship is fairly linear, so we decide to run a linear model with common slope.
+
+```{r}
+# running linear model with common slope
+ed_achievement <- lm(years_of_schooling ~ treatment + hh_income, data = cct_data)
+summary(ed_achievement)
+```
+
+<center>**WHAT DO THESE RESULTS TELL US?** </center><p>
+In line with our assumptions for linear models with common slope, we consider that treatment effect, $D_i$, does not depend on the forcing $X_i$. Hence, we can expect that students who received the treatment get on average 2.4 more years of schooling. We also see that for every €1,000 increase in the household income, students are expected to attain 0.6274 more years of education. (Our $\beta = -6.274e-04*1000$).
+
+<br>
+<br>
+
+---
+
+**Getting familiar with LOESS**
+
+Locally weighted smoothing is a popular tool used in regression analysis that creates a smooth line through a scatter plot to help you to see relationship between variables and foresee trends. We can introduce it to our `ggplot` as a part of geom_smooth by calling method "loess". 
+
+```{r fig.align = 'center', warning= F, message= F}
+ggplot(cct_data, 
+       aes(x = hh_income, 
+           y = years_of_schooling, 
+           color = factor(treatment))) + 
+  geom_point(alpha = 0.1) + 
+  labs(x = "Household Income", 
+       y = "Years of Schooling") +
+  geom_smooth(method = "loess") +
+  scale_color_discrete(name = " ", 
+                       labels = c("No treatment", "Treatment")) +
+  geom_vline(xintercept = 20000, linetype = "dotted") +
+  theme_minimal()
+```
+<p> The LOESS smoothing is not very visible in this relationship because of the way we defined the simulated data. Let's look at how it would look in our drinking age example:
+<p>
+```{r fig.align="center", warning= F, message= F}
+ggplot(mlda_df,
+       aes(x = agecell,  
+           y = outcome, 
+           col = factor(treatment))) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  labs(title = "LOESS smoothing",
+       x = "Forcing variable (Age)",
+       y = "Mortality rate from motor vehicle \naccidents (per 100,000)") +
+  scale_color_manual(name = "",
+                     values = c("#F8766D", "#00BFC4"),
+                     labels = c("Control", "Treatment")) +
+  theme_minimal()
+```
+
+<br>
+<br>
+
+---
+
+#### Violations to the assumptions
+
+You are made aware by a tax expert from your unit that €20000 is the upper-boundary for a very well known tax concession. You are afraid that people may be sorting themselves before the household income cut-off to become beneficiaries of multiple programs. You decide to check your data.
+
+```{r fig.align="center"}
+ggplot(cct_data, 
+       aes(x = hh_income)) +
+  geom_histogram(bins = 25) +
+  labs(title = "Income distribution",
+       x = "Household Income",
+       y = "Number of respondents") +
+  geom_vline(xintercept = 20000, linetype = "dotted") +
+  theme_minimal()
+```
+
+---
+
+This case looks a bit ambiguous. Do you think people are sorting out just before the cut-off? If sorting were to exist which assumptions would be challenged? Would the existence of other programs that have the same threshold affect a causal reading of our results?
+
+We can also apply an exact binomial test (like in the lecture). In this case, we can check ±1000
+
+```{r fig.align="center"}
+cct_data %>% 
+  dplyr::filter(dplyr::between(hh_income, 19000, 21000)) %>%
+  dplyr::group_by(treatment) %>%
+  dplyr::summarize(n = n()) %>%
+  knitr::kable() %>%
+  kableExtra::kable_styling()
+
+binom.test(530, 1050, p = 0.5)
+```
+
+
