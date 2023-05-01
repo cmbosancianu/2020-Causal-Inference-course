@@ -7,12 +7,12 @@ Instructors:
 - Constantin Manuel Bosancianu ([https://cmbosancianu.github.io](https://cmbosancianu.github.io))
 - Max Schaub ([https://maxschaub.eu](https://maxschaub.eu))
 
-I am extremely grateful to Max for permission to make public the set of files he developed for the class. Authorship has been clearly indicated in the case of each file.
+I am extremely grateful to Max for permission to make public the set of files he developed for the class. Authorship has been clearly indicated in the case of each file in the final section below.
 
 Teaching assistants:
 
-- Adelaida Barrera Daza ([https://www.hertie-school.org/en/who-we-are/profile/person/adelaida-barrera](https://www.hertie-school.org/en/who-we-are/profile/person/adelaida-barrera))
-- Sebastian Ramirez Ruiz ([https://seramirezruiz.github.io](https://seramirezruiz.github.io))
+- Adelaida Barrera Daza ([GitHub](https://github.com/adelaida-barrera), [LinkedIn](https://www.linkedin.com/in/adelaidabarrera/))
+- Sebastian Ramirez-Ruiz ([GitHub](https://seramirezruiz.github.io))
 
 Both Adelaida and Sebastian were *invaluable* during the course of the class, from running laboratory sessions, to developing `Rmarkdown` code files, finding example data, generating teaching slides for labs, and many other tasks in between. All code files and slides developed for the seminar sessions were entirely authored by them, and they deserve full credit for this. We couldn't have wished for better support, for which we remain grateful to this day!
 
