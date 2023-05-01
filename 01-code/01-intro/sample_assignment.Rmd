@@ -1,0 +1,38 @@
+---
+title: "Sample Assignment - Statistics II, Hertie School"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Task 1 - Interpreting a causal graph [7 points in total]
+
+Inspect the causal graph you see below and answer the following questions:
+
+![](https://user-images.githubusercontent.com/54796579/92458651-fa651000-f1c5-11ea-870e-ebb09c137582.png)
+
+a. Replicate the DAG using `ggdag` [2 Pts]
+
+b. Say you are interested in determining the causal effect of D on Y. What are back-door paths in this case? [2 Pts]
+
+c. What variables could you condition on to satisfy the backdoor criterion? [2 Pts]
+
+d. Now assume that you could observe U. Would this affect the validity of your solution in (b)? Would there be another solution? [1 Pt]
+
+## Task 2 - Unemployment Rate and Turnout [9 points in total]
+
+In the study “Economic Discontent as a Mobilizer: Unemployment and Voter Turnout”, Burden and Wichowsky argue that “a worsening economy has a disruptive effect that prods worried citizens to voice concern and seek remedies.” They investigate the effect the unemployment rate has on voter turnout at the county level in US presidential elections from 1976 to 2008. Please find the data they used for their study in BWJOP.RDS and a Codebook at the end of the assignment.
+
+a. Estimate the following model: Turnout = $\beta_0$ + $\beta_1$Unemploy_County + $\beta_2$PcntBlack + u [1 Pt]
+
+b. What is the estimated change in the turnout rate with an increase of the unemployment rate by 4 percentage points, holding the % high school graduates constant? And what is the estimated turnout rate for an unemplyoment rate of 8% in a county with 10% black population? Do your findings align with the argument of the authors? [3 Pts]
+
+c. What percentage of the variation in turnout rate is explained by the two variables? Is this important for the interpretation of the causal effect of unemplyoment on turnout? [2 Pts]
+
+d. Now extend the model by adding more covariates. Your goal is to estimate the causal effect of unemployment on turnout. Choose additional covariates accordingly, justify your choice, and explain potential differences between the new $\beta_1$ and the old $\beta_1$! [3 Pts]
+
+## Task 3 - Simulating post-treatment bias in R [5 points in total]
+
+Demonstrate how post-treatment bias can diminish the estimated full effect of a normally distributed variable X (mean 0, sd 1) on Y. X is supposed to affect Y both directly and through mediator M. The relationship between all variables can assumed to be linear. To demonstrate, simulate the data-generating process using R. Then, show the bias by comparing the estimates of linear models, once with, once without controlling for M!
