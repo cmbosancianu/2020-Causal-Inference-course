@@ -1,0 +1,321 @@
+---
+title: "Causal Graphs"
+output: 
+  html_document:
+    toc: TRUE
+    number_sections: FALSE
+    highlight: tango
+    theme: cosmo
+    toc_depth: 3
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r, echo=T, results='hide', warning=FALSE, message=FALSE}
+# Load packages. Install them first, in case you don't have them yet.
+set.seed(42) # For consistent randomization
+library(palmerpenguins) # To get our example's dataset 
+library(ggplot2) # To visualize data (this package is also loaded by library(tidyverse))
+library(stargazer) # To format regression tables 
+library(tidyverse) # To use dplyr functions and the pipe operator when needed
+library(knitr) # To create tables with kable()
+library(kableExtra) # To format tables with kable_styling()
+```
+
+---
+
+## Welcome
+
+This week's tutorial will be divided in two broader camps. First, we will learn some basics of data visualization with `ggplot`. Second, we will assess how to leverage **directed acyclic graphs (DAGs)** for causal inference. In fact, we will illustrate through simulated data how the **backdoor criterion**, **modeling**, and **bias** relate to each other.
+
+---
+
+<br>
+
+## Introduction to `ggplot2`
+
+`ggplot2` is by far the most popular visualization package in **R**. `ggplot2` implements the **grammar of graphics** to render a versatile syntax of creating visuals. The underlying logic of the package relies on deconstructing the structure of graphs (if you are interested in this you can read this [article](http://vita.had.co.nz/papers/layered-grammar.pdf)).  
+
+For the purposes of this introduction to visualization with ggplot, we care about the layered nature of visualizing with `ggplot2`.
+
+
+![](https://user-images.githubusercontent.com/54796579/94537983-b94fa100-0243-11eb-8d12-c2e685141092.png)
+
+\**This tutorial is based largely on chapters 7 to 10 from the [QPOLR book](http://qpolr.com/dataviz.html)*
+
+--- 
+
+We will utilize the following building blocks:
+
+- Data (the data frame we will be using)
+- Aesthetics (the variables we will be working with)
+- Geometric objects (the type of visualisation)
+- Theme adjustments (size, text, colours etc.)
+
+### Data
+The first thing we always have to specify in our function is the data frame. In other words, you will always have to use a data frame.
+
+```r
+ggplot(name_of_your_df)
+```
+
+### Aesthetics
+
+We then specify the variables in the data frame we will be using and what role they play. To do this we will use the function `aes()` within the `ggplot()` function after the data frame **(remember to add a comma after the data frame)**.
+
+```r
+ggplot(name_of_your_df, aes(x = your_x_axis_variable, y = your_y_axis_variable))
+```
+
+Beyond your axis, you can add more aesthetics representing further dimensions of the data in the two dimensional graphic plane, such as: size, color, fill, to name but a few.
+
+### Geometric objects
+
+The third layer to render our graph is a geomethic object. To add one, we need to add a plus (+) at the end of the intial line and state the type of geometric object we want to add, for example, `geom_point()` for a scatter plot, or `geom_bar()` for barplots. 
+
+```r
+ggplot(name_of_your_df, aes(x = your_x_axis_variable, y = your_y_axis_variable)) +
+  geom_point()
+```
+
+### Theme
+
+At this point our plot may just need some final thouches. We may want to fix the axis names or get rid of the default gray background. To do so, we need to add an additional layer preceded by a plus sign (+). If we want to change the names in our axes, we can utilize the `labs()` function. We can also employ some of the pre-loaded themes, for example, `theme_minimal()`.
+
+```r
+ggplot(name_of_your_df, aes(x = your_x_axis_variable, y = your_y_axis_variable)) +
+  geom_point() +
+  theme_minimal() +
+  labs(x = "Name you want displayed",
+       y = "Name you want displayed")
+```
+
+---
+
+### Exercise
+
+We have this plot that illustrates the relationship betwwen a the length of a penguin's flipper and their weight. We would like to adapt it to (1) convey another dimension through color, the species of penguin. Additionally, we would like to (2) change the axes names and (3) render the graph with `theme_minimal()`. Can you adapt the code?
+
+
+```{r}
+data("penguins")
+
+ggplot(penguins, aes(x = flipper_length_mm, y = body_mass_g)) +
+  geom_point()
+
+#answer
+ggplot(penguins, aes(x = flipper_length_mm, 
+                     y = body_mass_g, 
+                     color = species)) +
+  geom_point() +
+  theme_minimal() +
+  labs(x = "Length of the flipper",
+       y = "Body mass (g)",
+       color = "Species")
+```
+
+---
+
+### Plotting distributions
+
+If we are interested in plotting distributions of our data, we can leverage geometric objects, such as: 
+
+- `geom_histogram()`: which visualizes the distribution of a single continuous variable by dividing the x axis into bins and counting the number of observations in each bin.
+- `geom_density()`: which computes and draws kernel density estimate, which is a smoothed version of the histogram.
+- `geom_bar()`: which renders barplots and in plotting distributions behaves in a very similar way from `geom_hist()`
+
+This is a histogram presenting the weight distribution of penguins in our sample. Try to see what happens when you change the geom to `_density` and `_bar`.
+
+```{r}
+ggplot(penguins, aes(x = body_mass_g)) +
+  geom_histogram(binwidth = 100, 
+                 fill = "#FF6666")
+
+ggplot(penguins, aes(x = body_mass_g)) +
+  geom_density(alpha = 1, fill = "#FF6666")
+```
+
+---
+
+### Plotting relationships
+
+We can utilize graphs to explore how different variables are related. In fact, we did so before in our scatterplot. We can also use box plots and lines to show some of these relationships.
+
+For example, this boxplot showcasing the distribution of weight by species:
+
+```{r}
+ggplot(penguins, aes(x = species, y = body_mass_g)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(x = "Species",
+       y = "Body mass (g)")
+```
+
+Or this adaptation of our previous plot, with a line of best fit for the observed data by each species:
+
+```{r}
+ggplot(penguins, aes(x = flipper_length_mm,
+                     y = body_mass_g,
+                     color = species)) +
+  geom_point() + 
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_minimal() +
+  labs(x = "Length of the flipper",
+       y = "Body mass (g)",
+       color = "Species")
+```
+
+---
+
+Now that you have been introduced to some of the basics of `ggplot2`, **the best way to move forward is to experiment**. As we have discussed before, the **R** community is very open. Perhaps, you can gather some inspiration from the Tidy Tuesday weekly social data project in R where users explore a new dataset each week and share their visualizations and code on Twitter under \#TidyTuesday. You can explore some of the previous visualizations [here](https://shiny.rstudio.com/gallery/tidy-tuesday.html) and try to replicate their code.
+
+*[Here is a curated list](https://github.com/erikgahner/awesome-ggplot2) of awesome `ggplot2` resources.*
+
+---
+
+<br><br><br>
+
+## DAGs and modeling
+
+![](https://user-images.githubusercontent.com/54796579/94547573-b8bd0780-024f-11eb-9565-03b1d1109c3b.png)
+
+As we can remember from our slides, we were introduced to a set of **key** rules in understanding how to employ DAGs to guide our modeling strategy.
+
+- A path is open or unblocked at non-colliders (confounders or mediators)
+- A path is (naturally) blocked at colliders
+- An open path induces statistical association between two variables
+- Absence of an open path implies statistical independence
+- Two variables are d-connected if there is an open path between them
+- Two variables are d-separated if the path between them is blocked
+
+
+In this portion of the  tutorial we will demonstrate how different bias come to work when we model our relationships of interest. 
+
+---
+
+### The case for beauty, talent, and celebrity (What happens when we control for a collider?)
+
+![](https://user-images.githubusercontent.com/54796579/94370219-0706c500-00ef-11eb-814b-05ab715ee2e0.png)
+
+As it is showcased from our DAG, we assume that earning celebrity status is a function of an individuals beauty and talent. We will simulate data that reflects this assumptions. In our world, someone gains celebrity status if the sum of units of beauty and celebrity are greater than 8.
+
+```{r}
+# beauty - 1000 observations with mean 5 units of beauty and sd 1.5 (arbitrary scale)
+beauty <- rnorm(1000, 5, 1.5)
+
+# talent - 1000 observations with mean 3 units of talent and sd 1 (arbitrary scale)
+talent <- rnorm(1000, 3, 1)
+
+# celebrity - binary
+celebrity <-  ifelse(beauty + talent > 8, "Celeb" , "NotCeleb") # celebrity if the sum of units  are greater than 8
+
+celebrity_df <- dplyr::tibble(beauty, talent, celebrity) #we make a df with our values
+
+head(celebrity_df)
+```
+
+In this case, as our simulation suggest, we have a **collider structure**. We can see that celebrity can be a function of beauty or talent. Also, we can infer from the way we defined the variables that beauty and talent are d-separated (ie. the path between them is closed because celebrity is a collider). 
+
+Say you are interested in researching the relationship between **beauty** and **talent** for your Master's thesis, while doing your literature review you encounter a series of papers that find a negative relationship between the two and state that more beautiful people tend to be less talented. The model that these teams of the researchers used was the following:
+
+$$Y_{Talent} = \beta_0 + \beta_1Beauty + \beta_2Celebrity$$
+Your scientific hunch makes you believe that celebrity is a collider and that by controlling for it in their models, the researchers are inducing **collider bias**, or **endogenous bias**. You decide to move forward with your thesis by laying out a criticism to previous work on the field, given that you consider the formalization of their models is erroneous. You utilize the same data previous papers used, but based on your logic, you do not control for celebrity status. This is what you find:
+
+#### True model
+
+```{r}
+summary(lm(talent ~ beauty, data = celebrity_df))
+```
+
+```{r}
+ggplot(celebrity_df, aes(x = beauty, 
+                         y = talent)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+#### Biased model from previous literature
+
+Let's see 
+
+```{r}
+summary(lm(talent ~ beauty + celebrity,
+           data = celebrity_df))
+```
+
+```{r}
+ggplot(celebrity_df,
+       aes(x = beauty,
+           y = talent,
+           color = celebrity)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+As we can see, by controlling for a collider, the previous literature was inducing to a non-existent association between beauty and talent, also known as **collider** or **endogenous bias**.
+
+---
+
+### Shoe size and salary (What happens when we fail to control for a confounder?)
+
+![](https://user-images.githubusercontent.com/54796579/94558922-cd55cb80-0260-11eb-9b03-ff54416014a7.png)
+```{r }
+# sex - replicate male and female 500 times each
+sex <- rep(c("Male", "Female"), each = 500) 
+
+# shoe size - random number with mean 38 and sd 4, plus 4 if the observation is male
+shoesize <- rnorm(1000, 38, 2) + 
+  4 * as.numeric(sex == "Male") 
+
+# salary - a random number with mean 25 and sd 2, plus 5 if the observation is male
+salary <- rnorm(1000, 25, 2) + 
+  5 * as.numeric(sex == "Male") 
+
+salary_df <- dplyr::tibble(sex, shoesize, salary)
+
+head(salary_df)
+```
+
+Say now one of your peers tells you about this new study that suggests that **shoe size** has an effect on an individuals' **salary**. You are a bit skeptic and read it. The model that these researchers apply is the following:
+
+$$Y_{Salary} = \beta_0 + \beta_1ShoeSize$$
+Your scientific hunch makes you believe that this relationship could be confounded by the **sex** of the respondent. You think that by failing to control for sex in their models, the researchers are inducing **omitted variable bias**. You decide to open their replication files and control for sex. This is what you find:
+
+#### True model
+
+```{r}
+summary(lm(salary ~ shoesize + sex,
+           data = salary_df))
+```
+
+```{r}
+ggplot(salary_df,
+       aes(x = shoesize,
+           y = salary,
+           color = sex)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+#### Biased model from previous literature
+
+```{r}
+summary(lm(salary ~ shoesize,
+           data = salary_df))
+```
+
+
+```{r}
+ggplot(salary_df,
+       aes(x = shoesize,
+           y = salary)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+As we can see, by failing to control for a confounder, the previous literature was creating a non-existent association between shoe size and salary, incurring in **omitted variable bias**.
+
+$$Y = \beta_{0} + \beta_{1} $$
