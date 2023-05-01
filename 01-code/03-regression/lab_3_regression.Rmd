@@ -1,0 +1,335 @@
+---
+title: "Regression"
+output: 
+  html_document:
+    toc: TRUE
+    number_sections: FALSE
+    highlight: tango
+    theme: cosmo
+    toc_depth: 3
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+<br> 
+<br> 
+
+## Welcome
+
+In this week's lecture reviewed bivariate and multiple linear regressions. You also learned how they relate to the Potential Outcomes Framework and can be used, under certain conditions, for causal inference. 
+
+In this lab session we will:
+
+* Take a step back to review how to create tables and perform t-tests in R
+* Learn to run regression models using R 
+* Learn how to present to your results in neat tables
+
+We will use a package called `wooldridge` that contains dozens of datasets used by Jeffrey M. Wooldridge with pedagogical purposes in his book on Introductory Econometrics. 
+
+```{r, echo=T, results='hide', warning=FALSE, message=FALSE}
+# Load packages. Install them first, in case you don't have them yet.
+
+library(wooldridge) # To get our example's dataset 
+library(broom) # To format regression output 
+library(stargazer) # To format regression tables 
+library(tidyverse) # To use dplyr functions and the pipe operator when needed
+library(knitr) # To create tables with kable()
+library(kableExtra) # To format tables with kable_styling()
+
+```
+
+Now let's load and take a look at our data.
+
+```{r, echo=T, results='hide', warning=FALSE, message=FALSE}
+data("wage1")
+
+?wage1 #Using the help function you can explore what the variables in the dataset contain. 
+
+#You can also have a general view:
+str(wage1)
+head(wage1)
+
+#Or look at the whole thing using the function View(wage1) in your console.
+```
+<br>
+
+
+## Review: balance tables and t-test 
+
+Let's take this dataset as an example to review how to perform a t-test in r (task 4 of your first assignment).
+
+Remember the idea of using a t-test here is to check the statistical significance of a difference in means. In other words, we want to know how likely it is that the mean value of a variable in two groups or samples can be due to random chance (our null hypothesis). 
+
+In this case, let's imagine we want to check the statistical significance of the difference in means of years of education (interval variable) between men and women (categorical) in our dataset.
+
+The general syntax for a t-test is simply as follows. The vectors refer to the variables whose mean you want to compare. 
+
+```{r, eval=FALSE}
+t.test(y ~ x, data = your_data)
+```
+
+Is the difference in average years of education between men and women statistically significant? 
+
+```{r}
+t.test(educ ~ female, data = wage1)
+
+#OR 
+t.test(wage1$educ[wage1$female == 1],
+       wage1$educ[wage1$female == 0])
+```
+
+Now let's take a look at how can we create a simple and good looking balance table. The idea here is to compare the mean values of different variables across populations or groups. In our case, let's see whether men and women differ in average wages, years of education, years of experience and number of years in their current job.
+
+Here is one way to create the table. 
+
+```{r}
+wage1 %>% 
+  dplyr::group_by(female) %>% 
+  dplyr::select(wage, educ, exper, tenure) %>% 
+  dplyr::summarise_all(mean) %>% # uses the summarize function to all the vars. we selected 
+  t() %>% # To transpose the df 
+  as.data.frame() %>%  
+  dplyr::add_rownames("Variable") %>% 
+  dplyr::filter(Variable != "female") %>% # drop the redundant variable 
+  dplyr::rename(Male = V1, Female = V2) %>% # call the columns by what they are 
+  dplyr::mutate(Difference = Female - Male) %>% 
+  dplyr::mutate_if(is.numeric, round, 3) %>% 
+  knitr::kable() %>% 
+  kableExtra::kable_styling()
+```
+
+#### Your turn 
+
+* Create a table to see if white and non-white respondents in the survey are balanced in terms of education levels and job experience. 
+
+```{r}
+wage1 %>% 
+  dplyr::group_by(nonwhite) %>% 
+  dplyr::select(educ, exper) %>% 
+  dplyr::summarise_all(mean) %>% # uses the summarize function to all the vars. we selected 
+  t() %>% # To transpose the df 
+  as.data.frame() %>%  
+  dplyr::add_rownames("Variable") %>% 
+  dplyr::filter(Variable != "nonwhite") %>% # drop the redundant variable 
+  dplyr::rename(White = V1, Non_white = V2) %>% # call the columns by what they are 
+  dplyr::mutate(Difference = Non_white - White) %>% 
+  dplyr::mutate_if(is.numeric, round, 3) %>% 
+  knitr::kable() %>% 
+  kableExtra::kable_styling()
+```
+
+* Run a t-test to check the statistical significance of the differences in means that you observe. 
+
+```{r}
+t.test(educ ~ nonwhite,
+       data = wage1)
+
+t.test(exper ~ nonwhite,
+       data = wage1)
+
+# See the relationship with lm()
+lm(exper ~ nonwhite, data = wage1) %>% summary()
+
+```
+
+## Bivariate linear regression
+
+
+<br>
+Imagine that, using the `wage1` dataset you are interested in exploring the relationship between education and people's salaries. You want to look for the causal effect that getting one more year of education (`educ`) has on people's average wage per hour (`wage`). 
+
+You start by exploring their relationship:
+
+```{r}
+plot(wage1$educ, wage1$wage)
+
+cor(wage1$educ, wage1$wage)
+```
+
+<br>
+<br>
+
+As we saw in the lecture, you can resort to regression to address this question using observational data. 
+
+So you formalize the relationship you're after in a first, short model:
+
+$$wage = \alpha + \kappa education + u$$
+
+<br>
+
+Remember from the lecture (slide 18), that we can relate a regression equation with the potential outcomes framwework, as follows.
+
+<br>
+
+* Kappa, the regression coefficient for our independent variable *education*, is equal to the Naïve Average Treatment Effect or **NATE**. 
+
+$$\kappa = E[Y_1|D=1] - E[Y_0|D=0]$$
+<br>
+
+* The constant term (intercept) in our regression equation is equal to the expected outcome when not treated, for those untreated.
+
+$$\alpha = E[Y_0|D=0] $$
+<br>
+
+* The sum of the constant term *plus* the regression coefficient in our bivariate model is equal to the expected outcome when treated, for those treated.
+
+$$\alpha + \kappa = E[Y_1|D=1] $$
+<br>
+
+Now that we know what we are after, how to get these estimates in R? 
+
+### Running a linear model in R 
+
+The general syntax for running a regression model in R is the following:
+
+```{r, eval=FALSE}
+your_model <- lm(dependent_variable ~ independent_variable, data = your_dataset)
+```
+
+Now try to create an object with your model, based on the bivariate regression equation we specified above in which `wage` is our outcome of interest and `educ` is our independent or 'treatment' variable. 
+
+```{r}
+naive_model <- lm(wage ~ educ,
+                  data = wage1)
+```
+
+You have created an object that contains the all the coefficients, std errors and all other information included in your model. In order to **see** the estimates, you could use the base R function summary(), but base R is not the best at visualizing regression outputs. 
+
+The `tidy()` function from the `broom` package, instead, constructs a data frame that summarizes the model’s statistical findings. You can see what else you can do with `broom` by running: vignette("broom"). 
+
+See the difference: 
+
+```{r}
+summary(naive_model)
+
+broom::tidy(naive_model)
+
+# You can save into an object so you can easily pull the values later
+
+naive_model_df <- broom::tidy(naive_model)
+
+# Remember: magrittr can make your life easier
+
+naive_model_df <- lm(wage ~ educ, data = wage1) %>% broom::tidy()
+```
+
+How would you interpret these results? 
+
+* We can see that the coefficient for educ, (our kappa, our NATE), suggests that one more year of education is associated with a $0.54 increase in hourly wages. 
+
+* You can also see the value of the intercept (alpha, or E[Y_0|D = 0]) and the significance levels of our coefficients. 
+
+* What is the difference in expected hourly wages between a person who studies up to highschool (13 years) and a person with a college degree (17 years)?
+
+```{r}
+# Different ways to get to the same:
+
+(coef(naive_model)[1] + coef(naive_model)["educ"] * 17) - 
+(coef(naive_model)[1] + coef(naive_model)["educ"] * 13)
+
+predict(naive_model, newdata = data.frame(educ = 17)) -
+predict(naive_model, newdata = data.frame(educ = 13))
+
+coef(naive_model)["educ"] * (17 - 13)
+```
+
+* What is the expected hourly wage for someone with 25 years of education?
+
+```{r}
+predict(naive_model, newdata = data.frame(educ = 25))
+
+coef(naive_model)[1] + coef(naive_model)["educ"] * 25
+```
+
+* Under this model specifications, what percentage of the variation wage is explained by years of education?
+
+```{r}
+summary(naive_model)$r.squared
+```
+
+## Multiple regression 
+
+Looking for ATE. 
+
+But you know that this survey data does not fulfill the assumptions needed in order to infer causality without much doubt. It is highly likely that we are picking up the effect of varaibles that affect both Y (wages) and D (levels of education). People do not get more education by random chance: there can be different causes leading to people getting more education and earning more. That is, you suspect that `educ` is not independent of the error term. 
+
+After a good time reading about the gender pay gap, you admit that gender can be a those confounding variables. So you decide to include the `female` variable in the model.
+
+Now your model looks like this: 
+
+$$wage = \alpha^l + \kappa^leducation + \beta gender + u$$
+
+Our interpretation of the regression equation in POF terms will not change much. Kappa (long) is still the coefficient we are most interested in: the treatment effect of one more year of `educ` on `wage`. 
+
+But remember that multiple regression only uses the unique variation in each regressor not explained by other regressors, so including an additional term (`female`) -if it is associated with education and wage- will affect our treatment effect estimate. 
+
+Let's see: run a multiple regression using the model above. The general syntax for it is this:
+
+```{r, eval=FALSE}
+your_model <- lm(dependent_variable ~ independent_variable1 + independent_variable2,
+                 data = your_dataset)
+
+```
+
+```{r}
+less_naive_model <- lm(wage ~ educ + female, wage1)
+
+less_naive_model_df <- broom::tidy(less_naive_model)
+```
+
+How would you interpret these results now? 
+
+* What does the coefficient for the `female` variable tell us? 
+
+* What is the expected wage for a woman with 20 years of education? 
+
+* What is the difference if a man had the same amount of education 
+
+## Observing biases
+
+In order to see how biased the estimate from our more naïve or 'short' model was, we can compare the regression coefficients between our two models. Let's use the `stargazer` package to do so. 
+
+The function (also called) `stargazer()` allows you to see the resutls of different models side by side. The general syntax is:
+
+```{r, eval= FALSE}
+stargazer::stargazer(name_of_model_1, name_of_model_2,
+                     type = "format of output") 
+
+# Try out "text" and "html" as outputs
+```
+
+You can very specifically define the format and information included in your tables using stargazer. Check out, for example, [this](https://www.jakeruss.com/cheatsheets/stargazer/#add-a-title-change-the-variable-labels) and [this](https://cran.r-project.org/web/packages/stargazer/stargazer.pdf)
+
+* Create a stargazer table with both models. Try out using "text" and "html" for the output.
+
+```{r}
+stargazer::stargazer(naive_model, less_naive_model, 
+                     type = "text")
+```
+
+*Remember that to render the html output from stargazer you need to have `results = 'asis'` on your chunk.*
+
+```{r results='asis'}
+stargazer::stargazer(naive_model, less_naive_model, 
+                     type = "html")
+``` 
+
+* How biased was the estimate from our first model compared to our second model? 
+
+```{r}
+naive_model_df[2,2] - less_naive_model_df[2,2]
+
+# Or, the same
+coef(naive_model)["educ"] - coef(less_naive_model)["educ"]
+```
+
+#### Your turn 
+
+* can you think of additional observed confounding variable that could also have an effect on education and wages that you should include in your regression model? 
+
+* Specify the model to include an additional variable you thought of, see your results in a tidy format using `broom::tidy()` and include them in your `stargazer()` table.
+
+* How would you interpret the results?
