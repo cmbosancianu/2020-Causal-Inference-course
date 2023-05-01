@@ -1,0 +1,402 @@
+---
+title: "Session 10 - Moderation"
+output:
+  html_document:
+    theme: journal
+    toc: yes
+    toc_float:
+      collapsed: false
+     
+---
+
+## Measuring the effect of information on peace agreement support
+<br>
+The country of Absurdistan has had an ongoing civil conflict for the past 60 years. The fighting between national government forces and guerrilla members from the National Revolutionary Army (NRA) has lead to more than 200,000 deaths, 8 million internally displaced persons, and countless victims between 1960 to 2020. The civil war in Absurdistan has been a low-intensity asymmetric war. The legacies of the conflict have been bore largely by regions in the periphery of the country. Large cities and industrial regions have been spared from most of the fighting. 
+
+The government and the leadership of the NRA reached a peace agreement a couple of months ago; however, the agreement has been received poorly by the general population of Absurdistan. The opposition party the Undemocratic Center (UC) has allegedly ran campaigns misrepresenting the contents of the agreement in partisan media outlets and social media.
+
+The Special Envoy for Peace has established a taskforce to design a strategy to increase support for the peace agreement. Many in the taskforce suspect that if the public were properly informed about the agreement reached, the levels of support would be higher.
+
+You are hired as a scientific consultant for the taskforce. You run a survey experiment on a sample of 1000 respondents. You randomly assign respondents to watch an educational 40 second video about the peace agreement. Here are the results:
+
+<br>
+<br>
+
+---
+
+## 1.1 Exploring the data
+
+```{r warning=FALSE, message=FALSE}
+set.seed(42) #for consistent results
+
+library(dplyr) # to wrangle our data
+library(tidyr) # to wrangle our data - pivot_longer()
+library(ggplot2) # to render our graphs
+library(readr) # for loading the .csv data
+library(kableExtra) # to render better formatted tables
+library(stargazer) # for formatting your model output
+library(margins) #for calculating MARGINAL/PARTIAL EFFECT
+library(ggeffects) # easily calculating PREDICTIVE MARGINS
+
+moderation_df <- readr::read_csv("https://raw.githubusercontent.com/seramirezruiz/hertiestats2/master/data/moderation_df.csv") # simulated data
+names(moderation_df) # to check the names of the variables in our data
+
+```
+
+<br>
+Our dataset *moderation_df*, contains the following information:
+
++ `subject_id`: A unique numeric identification for each respondent
++ `treatment`: A binary marker for treatment
++ `victim_verbose`: A verbose binary marker of the respondents' victimhood status (Not a Victim-Victim)
++ `victim`: A numeric binary marker of the respondents' victimhood status (0-1)
++ `female`: A numeric binary marker of the respondents' sex (0-1)
++ `female_verbose`: A verbose binary marker of the respondents' sex (Male-Female)
++ `support_thermometer`: A continuous measure of support for the agreement (0-100)
+
+<br>
+
+#### Let's explore who is in our sample
+<p>
+We can use what we have learned about the base R *table()* function, to check who was in our sample:
+
+```{r}
+table(moderation_df$treatment) %>% 
+  knitr::kable(col.names = c("Treatment", "Frequency")) %>% # create kable table
+  kableExtra::kable_styling() # view kable table
+
+table(moderation_df$treatment, moderation_df$victim_verbose) %>% 
+  knitr::kable() %>% # create kable table
+  kableExtra::kable_styling() # view kable table
+```
+
+<br>
+<br>
+
+#### Let's explore visually the observed levels of public support for the agreement
+<p>
+
+
+```{r fig.align="center"}
+ggplot(moderation_df, aes(x = support_thermometer)) +
+  geom_density(fill = "#af8dc3", alpha = 0.5) +
+  theme_minimal() +
+  labs(x = "Support thermometer",
+       y = "Density")
+```
+
+<center>**WHAT DO WE OBSERVE IN THIS GRAPH?**</center>
+
+<br>
+<br>
+
+#### Let's explore visually the observed levels of public support for the agreement conditional on the treatment status
+
+```{r fig.align="center"}
+ggplot(moderation_df, aes(x = support_thermometer, fill = factor(treatment))) +
+  geom_density(alpha = 0.5) +
+  theme_minimal() +
+  labs(x = "Support thermometer",
+       y = "Density",
+       fill = "Treatment") +
+  theme(legend.position = "bottom")
+```
+
+<center>**WHAT DO WE OBSERVE IN THIS GRAPH?**</center>
+
+<br>
+<br>
+
+#### Let's explore visually the observed levels of public support for the agreement conditional on the treatment and victimhood status
+
+```{r fig.align="center", fig.height = 8}
+ggplot(moderation_df, aes(x = support_thermometer, fill = factor(treatment))) +
+  geom_density(alpha = 0.5) +
+  facet_wrap(victim_verbose~treatment, nrow = 4) +
+  theme_bw() +
+  labs(x = "Support thermometer",
+       y = "Density",
+       fill = "Treatment") +
+  theme(legend.position = "bottom")
+```
+
+<center>**WHAT DO WE OBSERVE IN THIS GRAPH?**</center>
+
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+
+## 1.2 Modeling and estimating
+
+During this week's lecture, we learned that we can explicitly model heterogeneity in treatment effects for subgroups. Thus, we can address the tension between having to do inference at the group level, and the recognition of individual differences.
+
+The analysis of heterogeneity can be very important for the design of our strategy. There are competing theories about the effects of conflict victimization on political behavior and attitudes. Some of the literature points to victims developing pro-social attitudes, while others suggest that victims become intransigent towards out-groups. **Could factual information about the peace agreement be received differently by victims and non-victims?** 
+
+<br>
+<br>
+
+#### How to estimate heterogenous treatment effects
+
+Heterogeneous treatment effects are usually estimated with regression models that include an interaction between the treatment and the moderator. In our case, the formula would look like this:
+
+$$Y_{i} = β_0 + β_1D_{i} + β_2Victim_{i} + β_3D_i * Victim_{i}+ ϵ_i  $$
+<p>
++ $β_0$: Constant <p>
++ $β_1$: Effect of $D_i$ on $Y_i$ if $Victim_i$ is zero <p>
++ $β_2$: Effect of $Victim_i$ on $Y_i$ if $D_i$ is zero <p>
++ $β_3$: Difference in treatment effects of $D_i$ depending on $Victim_i$ 
+
+<br>
+
+or in `lm()` terms:
+
+```r
+lm(outcome ~ treatment + moderator + (treatment*moderator))
+lm(outcome ~ treatment + moderator + treatment:moderator)
+lm(outcome ~ treatment * moderator)
+```
+<br>
+
+---
+
+<br>
+
+#### Let's model our results
+
+We will move forward by creating two models:<p>
++ A **naive model**, where we will regress `support_thermometer` on `treatment`.
++ An **interaction model**, where we will add an interaction between `treatment` and `victim`
+
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+### 1.2.1 Naive modeling
+
+<p>
+
+```{r, message=FALSE, warning=FALSE}
+naive_model <- lm(support_thermometer ~ treatment, data = moderation_df)
+```
+
+<div align="center">
+```{r}
+stargazer::stargazer(naive_model, type = "text")
+```
+</div>
+
+<br>
+
+<center>**WHAT DOES THIS MODEL TELL US?**</center> <p>
+The naive model suggests that the subjects that the support for the peace agreement is about 18.9 percentage points higher on average for the subjects that watched the educational video. We suspect, however, that the video may affect differently victims from non-victims of the conflict.
+
+<br>
+
+#### Here is a visual illustration of the values rendered by the naive regression
+
+```{r fig.align="center"}
+ggplot(moderation_df, aes(x = support_thermometer, fill = factor(treatment))) +
+  geom_density(alpha = 0.5) +
+  theme_minimal() +
+  geom_vline(xintercept = 35.055, linetype = "longdash", color = "red") + #D=0
+  geom_vline(xintercept = 35.055 + 18.898, linetype = "longdash", color = "darkblue") + #D=1
+  labs(x = "Support thermometer",
+       y = "Density",
+       fill = "Treatment") +
+  theme(legend.position = "bottom")
+```
+
+
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+### 1.2.2 Interaction model
+
+<p>
+Following any of the different formats renders the same results.
+
+```{r, message=FALSE, warning=FALSE}
+interaction_model <- lm(support_thermometer ~ treatment + victim + (treatment*victim), data = moderation_df)
+interaction_model_2 <- lm(support_thermometer ~ treatment + victim + treatment:victim, data = moderation_df)
+interaction_model_3 <- lm(support_thermometer ~ treatment*victim, data = moderation_df)
+```
+
+<div align="center">
+```{r}
+stargazer::stargazer(interaction_model, interaction_model_2, interaction_model_3, type = "text")
+```
+</div>
+
+<br>
+
+<center>**WHAT DOES THIS MODEL TELL US?**</center>
+
+<p>
++ $β_0$: Constant = The average support for non-victims who were not exposed to the video was 27.92 <p>
++ $β_1$: Effect of $D_i$ on $Y_i$ if $Victim_i$ is zero = The educational video results in an increase of about 8 percentage points of the peace agreement for the non-victims<p>
++ $β_2$: Effect of $Victim_i$ on $Y_i$ if $D_i$ is zero = On average, victims’ support for the peace agreement is 14.3 percentage points higher than that of the non-victims in the control group<p>
++ $β_3$: Difference in treatment effects of $D_i$ depending on $Victim_i$ = The educational video results in an additional increase for victims of about 21.8 percentage points, compared to the effect for non-victims <br>
+
+<br>
+
+#### Here is a visual illustration of the values rendered by the model with interaction terms
+
+```{r fig.align="center", fig.height = 8}
+moderation_df %>%
+  dplyr::group_by(treatment,victim_verbose) %>%
+  dplyr::mutate(avg_support = mean(support_thermometer)) %>%
+ggplot(., aes(x = support_thermometer, fill = factor(treatment))) +
+  geom_density(alpha = 0.5) +
+  geom_vline(aes(xintercept = avg_support), linetype = "longdash") +
+  facet_wrap(victim_verbose~treatment, nrow = 4) +
+  theme_bw() +
+  labs(x = "Support thermometer",
+       y = "Density",
+       fill = "Treatment") +
+  theme(legend.position = "bottom")
+```
+
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+## 1.3. Extracting marginal/partial effects from our interaction models
+
+For this portion, we are interested in **marginal/partial effects**, which we will extract through the `margins()` function from the `margins` package.
+
+Some packages in **R** aimed at rendering **marginal effects** do render the **predictive margins** instead. For the purposes of the class, when asked to render marginal or partial effects you are expected to render them as introduced in the lecture (i.e., $\frac{\partial Y_i}{\partial {D}_i}$). When asked for this, you will utilize `margins()`.
+
+You can check the documentation [here](http://cran.uni-muenster.de/web/packages/margins/vignettes/Introduction.html). The syntax for the `margins()` function for extracting partial effects of the treatment at different levels of the moderator is the following:
+
+```r
+margins::margins(name_of_your_model, variables = "treatment_var", at = list(moderator_variable = values))
+```
+
+Let's say we are interested in the **marginal/partial effect** of our video treatment for victims and non-victims. We would do:
+
+```{r}
+summary(margins::margins(interaction_model, variables = "treatment", at = list(victim = 0:1)))
+```
+<br>
+
+#### Let's plot the the marginal/partial effect of the treatment for victims and non-victims
+
+```{r, fig.height= 3}
+
+pe_margins <- margins::margins(interaction_model, variables = "treatment", at = list(victim = 0:1))
+
+pe_plotting <- summary(pe_margins) %>% #NOTE we use the summary output, instead of the margins object
+  dplyr::select(victim, AME, lower, upper) %>% # you will need to adapt this based your moderator
+  dplyr::mutate(victim_labels = ifelse(victim == 1, "Victim", "No Victim")) # you will need to adapt this based your moderator
+
+ggplot(pe_plotting, aes(x = victim_labels,
+                        y = AME)) +
+  geom_point(size = 1.5) +
+  geom_segment(aes(x = victim_labels, xend = victim_labels, y = lower, yend = upper), size = 0.5) + # render whiskers from confidence intervals
+  theme_minimal() +
+  scale_y_continuous(limits = c(0,45)) + # you may need to change the limits for your plots
+  labs(x = "Respondent status\n",
+       y = "\nPartial effect of educational video", 
+       caption = "Note: You can utilize it to describe what the plot illustrates during your assignment.") + 
+  coord_flip()
+
+```
+
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+## 1.4. Extracting predictive margins from our interaction models
+
+For this portion, we are interested in **predictive margins**. In here, our interest is to return the expectation for each level of a predictor. We will extract this through the `ggeffects()` function from the `ggeffects` package. You can check the documentation [here](https://strengejacke.github.io/ggeffects/index.html). The syntax is the following:
+
+```r
+ggeffects::ggeffect(name_of_your_model, terms = c("termA", "termB"))
+```
+
+Let's say we are interested in the **predictive margins** for all out victim and treatment permutations. We would do:
+
+```{r}
+ggeffects::ggeffect(interaction_model, terms = c("victim","treatment"))
+```
+
+<br>
+
+#### Let's plot these predictive margins
+
+In this exercise we will meet a very important function from `dplyr`, `dplyr::case_when()`. **This function allows us to vectorize multiple ifelse() statements**. The syntax is the following: 
+
+```r
+dplyr::case_when(condition ~ what to do if met)
+```
+
+Let's see it at play.
+
+```{r, fig.height=7}
+extracted_me <-  ggeffects::ggeffect(interaction_model, terms = c("victim","treatment")) %>%
+  dplyr::mutate(group_labels = dplyr::case_when(x == 1 & group == 1 ~ "Victim (1) - Treatment (1)",
+                                                x == 1 & group == 0 ~ "Victim (1) - Treatment (0)",
+                                                x == 0 & group == 1 ~ "Victim (0) - Treatment (1)",
+                                                x == 0 & group == 0 ~ "Victim (0) - Treatment (0)"
+  )) # adding labels to x groups to plot
+
+extracted_me
+
+ggplot(extracted_me, aes(x = group_labels, 
+                         y= predicted, 
+                         fill = group_labels)) +
+  geom_bar(stat = "identity", 
+           alpha = 0.5) + # we set dodge instead of default stacked
+  geom_point(size = 1.5) +
+  geom_segment(aes(x = group_labels, 
+                   xend = group_labels, 
+                   y = conf.high, 
+                   yend = conf.low), size = 0.5) + # render whiskers from confidence intervals
+  theme_minimal() +
+  labs(x = "\nRespondent status",
+       y = "Effect of educational video",
+       fill = "Treatment",
+       caption = "Note: You can utilize it to describe what the plot illustrates during your assignment.") +
+  theme(legend.position = "none")
+
+```
+
+
+<br>
+<br>
+
+---
+
+<br>
+<br>
+
+## 1.4 Drafting some brief recommedations
+
+After conducting your experiment, you report back to the taskforce. Based on your results, you suggest that the educational videos may be a useful tool to encourage the wider public to hold a warmer opinion about the peace agreement. You also tell the taskforce that, although the videos have an average positive effect, they affect with a higher intensity victims of the conflict. You suggest to develop alternative strategies to tackle the non-victims, so that they do not fall through the cracks.<p>
+
+<br>
+
+<center>
+<img src="https://media.giphy.com/media/rrLt0FcGrDeBq/giphy.gif" alt="peace" width="450"/></center>
